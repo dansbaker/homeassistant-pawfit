@@ -271,9 +271,10 @@ class PawfitTimestampSensor(SensorEntity):
             # Get the timestamp from the raw API data
             raw_data = data.get("_raw", {})
             state_data = raw_data.get("state", {})
-            utc_timestamp = state_data.get("utcDateTime")
+            location_data = state_data.get("location", {})
+            utc_timestamp = location_data.get("utcDateTime")
             
-            logging.warning(f"Tracker {self._tracker_id} timestamp extraction: raw_data exists={raw_data is not None}, state_data exists={state_data is not None}, utc_timestamp={utc_timestamp}")
+            logging.warning(f"Tracker {self._tracker_id} timestamp extraction: raw_data exists={raw_data is not None}, state_data exists={state_data is not None}, location_data exists={location_data is not None}, utc_timestamp={utc_timestamp}")
             
             if utc_timestamp:
                 try:
@@ -285,7 +286,7 @@ class PawfitTimestampSensor(SensorEntity):
                     logging.error(f"Tracker {self._tracker_id} failed to convert timestamp {utc_timestamp}: {e}")
                     return None
             else:
-                logging.error(f"Tracker {self._tracker_id}: No utcDateTime found in state data. State data: {state_data}")
+                logging.error(f"Tracker {self._tracker_id}: No utcDateTime found in location data. Location data: {location_data}")
         
         logging.error(f"Tracker {self._tracker_id}: Returning None for timestamp sensor")
         return None
