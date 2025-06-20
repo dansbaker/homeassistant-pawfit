@@ -1,0 +1,13 @@
+{
+  "domain": "pawfit",
+  "name": "Pawfit Pet Tracker",
+  "version": "0.1.0",
+  "codeowners": ["@danbaker"],
+  "documentation": "https://github.com/dansbaker/homeassistant-pawfit#readme",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "config_flow": true,
+  "single_config_entry": true,
+  "requirements": [],
+  "issue_tracker": "https://github.com/dansbaker/homeassistant-pawfit/issues"
+}

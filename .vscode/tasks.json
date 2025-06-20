@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Check Python files",
+      "type": "shell",
+      "command": "python3 -m py_compile custom_components/pawfit/*.py",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
