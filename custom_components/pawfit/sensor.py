@@ -25,9 +25,7 @@ class PawfitSensor(SensorEntity):
         self._attr_device_info = {
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
-            "model": tracker.get("model", "Unknown"),
-            "manufacturer": "PawFit",
-            "translation_key": "pawfit_tracker",
+            "model": tracker.get("model", "Unknown")
         }
 
     @property
@@ -73,8 +71,6 @@ class PawfitTimestampSensor(SensorEntity):
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
             "model": tracker.get("model", "Unknown"),
-            "manufacturer": "PawFit",
-            "translation_key": "pawfit_tracker",
         }
 
     @property
