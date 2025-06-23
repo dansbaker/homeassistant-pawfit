@@ -1,0 +1,7 @@
+{
+  "device": {
+    "pawfit_tracker": {
+      "default": "mdi:paw"
+    }
+  }
+}

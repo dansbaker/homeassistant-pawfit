@@ -51,6 +51,8 @@ class PawfitDeviceTracker(TrackerEntity):
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
             "model": tracker.get("model", "Unknown"),
+            "manufacturer": "PawFit",
+            "translation_key": "pawfit_tracker",
         }
         self._attr_latitude = None
         self._attr_longitude = None

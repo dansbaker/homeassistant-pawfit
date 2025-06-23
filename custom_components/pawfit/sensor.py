@@ -25,7 +25,7 @@ class PawfitSensor(SensorEntity):
         self._attr_device_info = {
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
-            "model": tracker.get("model", "Unknown"),
+            "model": tracker.get("model", "Unknown")
         }
 
     @property
