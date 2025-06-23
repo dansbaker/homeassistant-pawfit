@@ -170,12 +170,6 @@ class PawfitDeviceTracker(TrackerEntity):
         else:
             logging.warning(f"Tracker {self._tracker_id}: No data available from coordinator")
 
-    @property
-    def state(self):
-        if self._attr_latitude is not None and self._attr_longitude is not None:
-            return f"{self._attr_latitude}, {self._attr_longitude}"
-        return None
-
     async def async_update(self):
         await self._coordinator.async_request_refresh()
         self._update_attrs()
