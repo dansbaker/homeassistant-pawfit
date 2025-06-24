@@ -208,3 +208,208 @@ class PawfitApiClient:
         self._logger.debug(f"Returning locations: {locations}")
         return locations
 
+    async def async_get_detailed_status(self) -> list:
+        """Get detailed status information for all trackers including timers."""
+        self._logger.debug("Starting async_get_detailed_status call")
+        # Ensure we are authenticated
+        if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
+            self._logger.debug("Not authenticated, calling async_login() before fetching detailed status")
+            await self.async_login()
+        
+        url = f"{BASE_URL}getlocationcaches/1/1"
+        headers = {"User-Agent": USER_AGENT}
+        self._logger.debug(f"Requesting detailed status: url={url}, headers={headers}")
+        
+        resp = await self._request_with_reauth("GET", url, headers)
+        resp_text = await resp.text()
+        self._logger.debug(f"Raw detailed status response: {resp_text}")
+        
+        try:
+            try:
+                data = await resp.json()
+            except Exception as e:
+                self._logger.warning(f"Falling back to manual JSON decode for detailed status due to: {e}")
+                import json
+                data = json.loads(resp_text)
+        except Exception as e:
+            self._logger.error(f"Failed to parse JSON from detailed status response: {e}, body={resp_text}")
+            raise Exception("Invalid response from Pawfit API (detailed status)")
+        
+        self._logger.debug(f"Parsed detailed status JSON: {data}")
+        
+        if not data.get("success", False):
+            self._logger.error(f"Detailed status API returned failure: {data}")
+            raise Exception("Detailed status API returned failure")
+        
+        return data.get("data", [])
+
+    async def async_start_find_mode(self, tracker_id: str) -> bool:
+        """Start find mode for a specific tracker."""
+        self._logger.debug(f"Starting find mode for tracker {tracker_id}")
+        # Ensure we are authenticated
+        if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
+            await self.async_login()
+        
+        url = f"{BASE_URL}starttracking/1/1"
+        params = {"gps": "1", "tracker": tracker_id}
+        headers = {"User-Agent": USER_AGENT}
+        
+        self._logger.debug(f"Starting find mode: url={url}, params={params}")
+        
+        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp_text = await resp.text()
+        self._logger.debug(f"Find mode start response: status={resp.status}, body={resp_text}")
+        
+        if resp.status == 200:
+            try:
+                data = await resp.json() if resp.content_type == 'application/json' else {"success": True}
+                return data.get("success", True)
+            except:
+                # If we can't parse JSON, assume success if status is 200
+                return True
+        else:
+            self._logger.error(f"Failed to start find mode: status={resp.status}, body={resp_text}")
+            return False
+
+    async def async_stop_find_mode(self, tracker_id: str) -> bool:
+        """Stop find mode for a specific tracker."""
+        self._logger.debug(f"Stopping find mode for tracker {tracker_id}")
+        # Ensure we are authenticated
+        if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
+            await self.async_login()
+        
+        url = f"{BASE_URL}stoptracking/1/1"
+        params = {"gps": "1", "tracker": tracker_id}
+        headers = {"User-Agent": USER_AGENT}
+        
+        self._logger.debug(f"Stopping find mode: url={url}, params={params}")
+        
+        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp_text = await resp.text()
+        self._logger.debug(f"Find mode stop response: status={resp.status}, body={resp_text}")
+        
+        if resp.status == 200:
+            try:
+                data = await resp.json() if resp.content_type == 'application/json' else {"success": True}
+                return data.get("success", True)
+            except:
+                # If we can't parse JSON, assume success if status is 200
+                return True
+        else:
+            self._logger.error(f"Failed to stop find mode: status={resp.status}, body={resp_text}")
+            return False
+
+    async def async_start_light_mode(self, tracker_id: str) -> bool:
+        """Start light mode for a specific tracker."""
+        self._logger.debug(f"Starting light mode for tracker {tracker_id}")
+        # Note: This endpoint is assumed based on the pattern. May need adjustment.
+        # If there's a specific light mode endpoint, update this URL accordingly.
+        if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
+            await self.async_login()
+        
+        # Using the same endpoint but with light=1 parameter instead of gps=1
+        # This may need to be adjusted based on actual API documentation
+        url = f"{BASE_URL}starttracking/1/1"
+        params = {"light": "1", "tracker": tracker_id}
+        headers = {"User-Agent": USER_AGENT}
+        
+        self._logger.debug(f"Starting light mode: url={url}, params={params}")
+        
+        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp_text = await resp.text()
+        self._logger.debug(f"Light mode start response: status={resp.status}, body={resp_text}")
+        
+        if resp.status == 200:
+            try:
+                data = await resp.json() if resp.content_type == 'application/json' else {"success": True}
+                return data.get("success", True)
+            except:
+                return True
+        else:
+            self._logger.error(f"Failed to start light mode: status={resp.status}, body={resp_text}")
+            return False
+
+    async def async_stop_light_mode(self, tracker_id: str) -> bool:
+        """Stop light mode for a specific tracker."""
+        self._logger.debug(f"Stopping light mode for tracker {tracker_id}")
+        # Ensure we are authenticated
+        if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
+            await self.async_login()
+        
+        url = f"{BASE_URL}stoptracking/1/1"
+        params = {"light": "1", "tracker": tracker_id}
+        headers = {"User-Agent": USER_AGENT}
+        
+        self._logger.debug(f"Stopping light mode: url={url}, params={params}")
+        
+        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp_text = await resp.text()
+        self._logger.debug(f"Light mode stop response: status={resp.status}, body={resp_text}")
+        
+        if resp.status == 200:
+            try:
+                data = await resp.json() if resp.content_type == 'application/json' else {"success": True}
+                return data.get("success", True)
+            except:
+                # If we can't parse JSON, assume success if status is 200
+                return True
+        else:
+            self._logger.error(f"Failed to stop light mode: status={resp.status}, body={resp_text}")
+            return False
+
+    async def async_start_alarm_mode(self, tracker_id: str) -> bool:
+        """Start alarm mode for a specific tracker."""
+        self._logger.debug(f"Starting alarm mode for tracker {tracker_id}")
+        # Ensure we are authenticated
+        if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
+            await self.async_login()
+        
+        url = f"{BASE_URL}starttracking/1/1"
+        params = {"speaker": "1", "tracker": tracker_id}
+        headers = {"User-Agent": USER_AGENT}
+        
+        self._logger.debug(f"Starting alarm mode: url={url}, params={params}")
+        
+        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp_text = await resp.text()
+        self._logger.debug(f"Alarm mode start response: status={resp.status}, body={resp_text}")
+        
+        if resp.status == 200:
+            try:
+                data = await resp.json() if resp.content_type == 'application/json' else {"success": True}
+                return data.get("success", True)
+            except:
+                # If we can't parse JSON, assume success if status is 200
+                return True
+        else:
+            self._logger.error(f"Failed to start alarm mode: status={resp.status}, body={resp_text}")
+            return False
+
+    async def async_stop_alarm_mode(self, tracker_id: str) -> bool:
+        """Stop alarm mode for a specific tracker."""
+        self._logger.debug(f"Stopping alarm mode for tracker {tracker_id}")
+        # Ensure we are authenticated
+        if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
+            await self.async_login()
+        
+        url = f"{BASE_URL}stoptracking/1/1"
+        params = {"speaker": "1", "tracker": tracker_id}
+        headers = {"User-Agent": USER_AGENT}
+        
+        self._logger.debug(f"Stopping alarm mode: url={url}, params={params}")
+        
+        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp_text = await resp.text()
+        self._logger.debug(f"Alarm mode stop response: status={resp.status}, body={resp_text}")
+        
+        if resp.status == 200:
+            try:
+                data = await resp.json() if resp.content_type == 'application/json' else {"success": True}
+                return data.get("success", True)
+            except:
+                # If we can't parse JSON, assume success if status is 200
+                return True
+        else:
+            self._logger.error(f"Failed to stop alarm mode: status={resp.status}, body={resp_text}")
+            return False
+

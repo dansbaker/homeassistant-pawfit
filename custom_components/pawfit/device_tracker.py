@@ -35,8 +35,26 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         # Fetch latest location data for all trackers
-        data = await self.client.async_get_locations(self.tracker_ids)
-        return data
+        location_data = await self.client.async_get_locations(self.tracker_ids)
+        
+        # Fetch detailed status data including timers
+        try:
+            detailed_status = await self.client.async_get_detailed_status()
+            
+            # Merge the data by tracker ID
+            for tracker_info in detailed_status:
+                tracker_id = tracker_info.get("tracker")
+                if tracker_id and tracker_id in location_data:
+                    # Add timer and status information
+                    location_data[tracker_id].update({
+                        "timer_gps": tracker_info.get("timerGps", 0),
+                        "timer_light": tracker_info.get("timerLight", 0)
+                    })
+        except Exception as e:
+            logging.warning(f"Failed to fetch detailed status: {e}")
+            # Continue with just location data if detailed status fails
+        
+        return location_data
 
 class PawfitDeviceTracker(TrackerEntity):
     def __init__(self, tracker, coordinator):

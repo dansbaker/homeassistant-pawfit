@@ -1,10 +1,13 @@
 """Binary sensor platform for Pawfit integration."""
 
 import logging
+from datetime import datetime, timedelta
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.core import callback
 
 from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class PawfitChargingSensor(BinarySensorEntity):
@@ -54,6 +57,177 @@ class PawfitChargingSensor(BinarySensorEntity):
         self.async_write_ha_state()
 
 
+class PawfitFindModeActive(BinarySensorEntity):
+    """Binary sensor for Find Mode active status."""
+    
+    def __init__(self, tracker, coordinator):
+        self._tracker = tracker
+        self._coordinator = coordinator
+        self._tracker_id = tracker["tracker_id"]
+        self._attr_name = f"{tracker['name']}'s PawFit Tracker Find Mode"
+        self._attr_unique_id = f"{tracker['petId']}_find_mode_active"
+        self._attr_icon = "mdi:map-search"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, str(self._tracker_id))},
+            "name": f"{tracker['name']}'s PawFit Tracker",
+            "model": tracker.get("model", "Unknown")
+        }
+
+    @property
+    def is_on(self):
+        """Return True if Find Mode is active."""
+        if self._coordinator.data is None:
+            return False
+        
+        data = self._coordinator.data.get(self._tracker_id, {})
+        timer_start = data.get("timer")
+        
+        if timer_start is None or timer_start == 0:
+            return False
+        
+        # Check if within 10 minutes (600 seconds) of timer start
+        try:
+            start_time = datetime.fromtimestamp(timer_start)
+            current_time = datetime.now()
+            elapsed = current_time - start_time
+            return elapsed.total_seconds() < 600  # 10 minutes
+        except (ValueError, TypeError):
+            _LOGGER.warning("Invalid timer value for tracker %s: %s", self._tracker_id, timer_start)
+            return False
+
+    @property
+    def available(self):
+        """Return if entity is available."""
+        return self._coordinator.last_update_success
+
+    async def async_added_to_hass(self):
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        # Register for coordinator updates
+        self.async_on_remove(
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+
+class PawfitLightModeActive(BinarySensorEntity):
+    """Binary sensor for Light Mode active status."""
+    
+    def __init__(self, tracker, coordinator):
+        self._tracker = tracker
+        self._coordinator = coordinator
+        self._tracker_id = tracker["tracker_id"]
+        self._attr_name = f"{tracker['name']}'s PawFit Tracker Light Mode"
+        self._attr_unique_id = f"{tracker['petId']}_light_mode_active"
+        self._attr_icon = "mdi:flashlight"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, str(self._tracker_id))},
+            "name": f"{tracker['name']}'s PawFit Tracker",
+            "model": tracker.get("model", "Unknown")
+        }
+
+    @property
+    def is_on(self):
+        """Return True if Light Mode is active."""
+        if self._coordinator.data is None:
+            return False
+        
+        data = self._coordinator.data.get(self._tracker_id, {})
+        light_timer_start = data.get("light_timer")
+        
+        if light_timer_start is None or light_timer_start == 0:
+            return False
+        
+        # Check if within 10 minutes (600 seconds) of timer start
+        try:
+            start_time = datetime.fromtimestamp(light_timer_start)
+            current_time = datetime.now()
+            elapsed = current_time - start_time
+            return elapsed.total_seconds() < 600  # 10 minutes
+        except (ValueError, TypeError):
+            _LOGGER.warning("Invalid light timer value for tracker %s: %s", self._tracker_id, light_timer_start)
+            return False
+
+    @property
+    def available(self):
+        """Return if entity is available."""
+        return self._coordinator.last_update_success
+
+    async def async_added_to_hass(self):
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        # Register for coordinator updates
+        self.async_on_remove(
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+
+class PawfitAlarmModeActive(BinarySensorEntity):
+    """Binary sensor for Alarm Mode active status."""
+    
+    def __init__(self, tracker, coordinator):
+        self._tracker = tracker
+        self._coordinator = coordinator
+        self._tracker_id = tracker["tracker_id"]
+        self._attr_name = f"{tracker['name']}'s PawFit Tracker Alarm Mode"
+        self._attr_unique_id = f"{tracker['petId']}_alarm_mode_active"
+        self._attr_icon = "mdi:alarm-light"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, str(self._tracker_id))},
+            "name": f"{tracker['name']}'s PawFit Tracker",
+            "model": tracker.get("model", "Unknown")
+        }
+
+    @property
+    def is_on(self):
+        """Return True if Alarm Mode is active."""
+        if self._coordinator.data is None:
+            return False
+        
+        data = self._coordinator.data.get(self._tracker_id, {})
+        timer_speaker = data.get("timerSpeaker")
+        
+        if timer_speaker is None or timer_speaker == 0:
+            return False
+        
+        # Check if within 10 minutes (600 seconds) of timer start
+        try:
+            start_time = datetime.fromtimestamp(timer_speaker)
+            current_time = datetime.now()
+            elapsed = current_time - start_time
+            return elapsed.total_seconds() < 600  # 10 minutes
+        except (ValueError, TypeError):
+            _LOGGER.warning("Invalid timer speaker value for tracker %s: %s", self._tracker_id, timer_speaker)
+            return False
+
+    @property
+    def available(self):
+        """Return if entity is available."""
+        return self._coordinator.last_update_success
+
+    async def async_added_to_hass(self):
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        # Register for coordinator updates
+        self.async_on_remove(
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Pawfit binary sensor entities from a config entry."""
     # Get the coordinator from hass.data (created in __init__.py)
@@ -62,5 +236,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities = []
     for tracker in coordinator.trackers:
         entities.append(PawfitChargingSensor(tracker, coordinator))
+        entities.append(PawfitFindModeActive(tracker, coordinator))
+        entities.append(PawfitLightModeActive(tracker, coordinator))
+        entities.append(PawfitAlarmModeActive(tracker, coordinator))
     
     async_add_entities(entities)
