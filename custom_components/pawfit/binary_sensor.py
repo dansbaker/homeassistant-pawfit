@@ -82,7 +82,10 @@ class PawfitFindModeActive(BinarySensorEntity):
         data = self._coordinator.data.get(self._tracker_id, {})
         find_timer = data.get("find_timer")
         
+        _LOGGER.debug(f"Find mode check for tracker {self._tracker_id}: find_timer={find_timer}")
+        
         if find_timer is None or find_timer == 0:
+            _LOGGER.debug(f"Find mode inactive for tracker {self._tracker_id}: timer is None or 0")
             return False
         
         # Check if within 10 minutes (600 seconds) of timer start
@@ -92,7 +95,12 @@ class PawfitFindModeActive(BinarySensorEntity):
             timer_start_seconds = find_timer / 1000.0
             current_time_seconds = time.time()
             elapsed_seconds = current_time_seconds - timer_start_seconds
-            return elapsed_seconds < 600  # 10 minutes
+            
+            _LOGGER.debug(f"Find mode timer check for tracker {self._tracker_id}: timer_start={timer_start_seconds}, current={current_time_seconds}, elapsed={elapsed_seconds}")
+            
+            is_active = elapsed_seconds < 600  # 10 minutes
+            _LOGGER.debug(f"Find mode active for tracker {self._tracker_id}: {is_active}")
+            return is_active
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid find timer value for tracker %s: %s", self._tracker_id, find_timer)
             return False
@@ -141,7 +149,10 @@ class PawfitLightModeActive(BinarySensorEntity):
         data = self._coordinator.data.get(self._tracker_id, {})
         light_timer_start = data.get("light_timer")
         
+        _LOGGER.debug(f"Light mode check for tracker {self._tracker_id}: light_timer={light_timer_start}")
+        
         if light_timer_start is None or light_timer_start == 0:
+            _LOGGER.debug(f"Light mode inactive for tracker {self._tracker_id}: timer is None or 0")
             return False
         
         # Check if within 10 minutes (600 seconds) of timer start
@@ -151,7 +162,12 @@ class PawfitLightModeActive(BinarySensorEntity):
             timer_start_seconds = light_timer_start / 1000.0
             current_time_seconds = time.time()
             elapsed_seconds = current_time_seconds - timer_start_seconds
-            return elapsed_seconds < 600  # 10 minutes
+            
+            _LOGGER.debug(f"Light mode timer check for tracker {self._tracker_id}: timer_start={timer_start_seconds}, current={current_time_seconds}, elapsed={elapsed_seconds}")
+            
+            is_active = elapsed_seconds < 600  # 10 minutes
+            _LOGGER.debug(f"Light mode active for tracker {self._tracker_id}: {is_active}")
+            return is_active
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid light timer value for tracker %s: %s", self._tracker_id, light_timer_start)
             return False
@@ -200,7 +216,10 @@ class PawfitAlarmModeActive(BinarySensorEntity):
         data = self._coordinator.data.get(self._tracker_id, {})
         alarm_timer = data.get("alarm_timer")
         
+        _LOGGER.debug(f"Alarm mode check for tracker {self._tracker_id}: alarm_timer={alarm_timer}")
+        
         if alarm_timer is None or alarm_timer == 0:
+            _LOGGER.debug(f"Alarm mode inactive for tracker {self._tracker_id}: timer is None or 0")
             return False
         
         # Check if within 10 minutes (600 seconds) of timer start
@@ -210,7 +229,12 @@ class PawfitAlarmModeActive(BinarySensorEntity):
             timer_start_seconds = alarm_timer / 1000.0
             current_time_seconds = time.time()
             elapsed_seconds = current_time_seconds - timer_start_seconds
-            return elapsed_seconds < 600  # 10 minutes
+            
+            _LOGGER.debug(f"Alarm mode timer check for tracker {self._tracker_id}: timer_start={timer_start_seconds}, current={current_time_seconds}, elapsed={elapsed_seconds}")
+            
+            is_active = elapsed_seconds < 600  # 10 minutes
+            _LOGGER.debug(f"Alarm mode active for tracker {self._tracker_id}: {is_active}")
+            return is_active
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid alarm timer value for tracker %s: %s", self._tracker_id, alarm_timer)
             return False

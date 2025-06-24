@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 
 from .const import DOMAIN
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class PawfitSensor(SensorEntity):
     """Base sensor class for Pawfit trackers."""
@@ -155,6 +157,8 @@ class PawfitTimerSensor(SensorEntity):
         data = self._coordinator.data.get(self._tracker_id, {})
         timer_start = data.get(self._timer_type, 0)
         
+        _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: timer_start={timer_start}")
+        
         if timer_start and timer_start > 0:
             try:
                 import time
@@ -166,11 +170,14 @@ class PawfitTimerSensor(SensorEntity):
                 # 10 minutes = 600 seconds
                 remaining_seconds = 600 - elapsed_seconds
                 
+                _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: timer_start_sec={timer_start_seconds}, current={current_time_seconds}, elapsed={elapsed_seconds}, remaining={remaining_seconds}")
+                
                 if remaining_seconds > 0:
                     return int(remaining_seconds)
                 else:
                     return 0
             except (ValueError, TypeError):
+                _LOGGER.warning(f"Invalid timer value for {self._timer_type} on tracker {self._tracker_id}: {timer_start}")
                 return 0
         return 0
 
