@@ -47,21 +47,34 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
                 detailed_dict = {}
                 for item in detailed_status:
                     tracker_id = item.get("tracker") or item.get("tracker_id") or item.get("id")
+                    self.logger.debug(f"Processing detailed status item: tracker_id={tracker_id}, item_keys={list(item.keys()) if isinstance(item, dict) else 'Not dict'}")
                     if tracker_id:
                         detailed_dict[str(tracker_id)] = item
+                        self.logger.debug(f"Added tracker {tracker_id} to detailed_dict with timers: timerGps={item.get('timerGps', 'missing')}, timerLight={item.get('timerLight', 'missing')}, timerSpeaker={item.get('timerSpeaker', 'missing')}")
                 detailed_status = detailed_dict
+                self.logger.debug(f"Converted detailed_status list to dict with keys: {list(detailed_status.keys())}")
+            
+            self.logger.debug(f"Location data keys: {list(location_data.keys()) if location_data else 'No location data'}")
+            self.logger.debug(f"Detailed status keys: {list(detailed_status.keys()) if isinstance(detailed_status, dict) else f'Not dict: {type(detailed_status)}'}")
             
             # Merge the data by tracker ID
             for tracker_id_str, tracker_info in detailed_status.items():
+                self.logger.debug(f"Checking tracker {tracker_id_str} - exists in location_data: {tracker_id_str in location_data}")
                 if tracker_id_str in location_data:
                     # Add timer and status information from detailed status
                     # Map the timer fields from API response to consistent names
+                    timer_gps = tracker_info.get("timerGps", 0)
+                    timer_light = tracker_info.get("timerLight", 0)
+                    timer_speaker = tracker_info.get("timerSpeaker", 0)
+                    
                     location_data[tracker_id_str].update({
-                        "find_timer": tracker_info.get("timerGps", 0),
-                        "light_timer": tracker_info.get("timerLight", 0), 
-                        "alarm_timer": tracker_info.get("timerSpeaker", 0)
+                        "find_timer": timer_gps,
+                        "light_timer": timer_light, 
+                        "alarm_timer": timer_speaker
                     })
-                    self.logger.debug(f"Updated tracker {tracker_id_str} with timers: find_timer={tracker_info.get('timerGps', 0)}, light_timer={tracker_info.get('timerLight', 0)}, alarm_timer={tracker_info.get('timerSpeaker', 0)}")
+                    self.logger.debug(f"Updated tracker {tracker_id_str} with timers: find_timer={timer_gps}, light_timer={timer_light}, alarm_timer={timer_speaker}")
+                else:
+                    self.logger.warning(f"Tracker {tracker_id_str} from detailed status not found in location_data")
         except Exception as e:
             self.logger.warning(f"Failed to fetch detailed status: {e}")
             # Continue with just location data if detailed status fails
