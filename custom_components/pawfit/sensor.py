@@ -35,7 +35,7 @@ class PawfitSensor(SensorEntity):
         """Return the sensor value."""
         if self._coordinator.data is None:
             return None
-        loc = self._coordinator.data.get(self._tracker_id, {})
+        loc = self._coordinator.data.get(str(self._tracker_id), {})
         return loc.get(self._kind)
 
     @property
@@ -82,7 +82,7 @@ class PawfitTimestampSensor(SensorEntity):
             logging.warning(f"Tracker {self._tracker_id}: No coordinator data available")
             return None
         
-        data = self._coordinator.data.get(self._tracker_id, {})
+        data = self._coordinator.data.get(str(self._tracker_id), {})
         logging.warning(f"Tracker {self._tracker_id}: Processing timestamp sensor, data keys: {list(data.keys()) if data else 'None'}")
         
         if self._kind == "last_update":
@@ -155,7 +155,7 @@ class PawfitTimerSensor(SensorEntity):
             _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: coordinator data is None")
             return 0
         
-        data = self._coordinator.data.get(self._tracker_id, {})
+        data = self._coordinator.data.get(str(self._tracker_id), {})
         timer_start = data.get(self._timer_type, 0)
         
         _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: timer_start={timer_start}, all_data_keys={list(data.keys()) if data else 'No data'}")
@@ -190,7 +190,7 @@ class PawfitTimerSensor(SensorEntity):
         if self._coordinator.data is None:
             return {}
         
-        data = self._coordinator.data.get(self._tracker_id, {})
+        data = self._coordinator.data.get(str(self._tracker_id), {})
         timer_start = data.get(self._timer_type, 0)
         
         attributes = {}

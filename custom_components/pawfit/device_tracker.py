@@ -42,6 +42,12 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         location_data = await self.client.async_get_locations(self.tracker_ids)
         self.logger.debug(f"Location data fetched successfully, keys: {list(location_data.keys()) if location_data else 'No data'}")
         
+        # Convert location_data keys to strings for consistency with detailed_status keys
+        if location_data:
+            location_data_str_keys = {str(k): v for k, v in location_data.items()}
+            location_data = location_data_str_keys
+            self.logger.debug(f"Converted location_data keys to strings: {list(location_data.keys())}")
+        
         # Fetch detailed status data including timers
         try:
             self.logger.debug(f"Fetching detailed status for trackers: {self.tracker_ids}")
@@ -83,6 +89,9 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
                     
                     self.logger.debug(f"Extracted timer values for tracker {tracker_id_str}: timerGps={timer_gps}, timerLight={timer_light}, timerSpeaker={timer_speaker}")
                     
+                    # Validate location_data structure before updating
+                    self.logger.debug(f"Location data for tracker {tracker_id_str} before timer merge: {location_data[tracker_id_str]}")
+                    
                     location_data[tracker_id_str].update({
                         "find_timer": timer_gps,
                         "light_timer": timer_light, 
@@ -90,6 +99,12 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
                     })
                     self.logger.debug(f"Updated tracker {tracker_id_str} with timers: find_timer={timer_gps}, light_timer={timer_light}, alarm_timer={timer_speaker}")
                     self.logger.debug(f"Final location_data for tracker {tracker_id_str}: {location_data[tracker_id_str]}")
+                    
+                    # Verify the merge worked
+                    verify_find = location_data[tracker_id_str].get("find_timer")
+                    verify_light = location_data[tracker_id_str].get("light_timer") 
+                    verify_alarm = location_data[tracker_id_str].get("alarm_timer")
+                    self.logger.debug(f"POST-MERGE VERIFICATION - Tracker {tracker_id_str}: find_timer={verify_find}, light_timer={verify_light}, alarm_timer={verify_alarm}")
                 else:
                     self.logger.warning(f"Tracker {tracker_id_str} from detailed status not found in location_data. Available location data keys: {list(location_data.keys())}")
         except Exception as e:
@@ -139,7 +154,7 @@ class PawfitDeviceTracker(TrackerEntity):
         return self._coordinator.last_update_success and self._attr_latitude is not None and self._attr_longitude is not None
 
     def _update_attrs(self):
-        data = self._coordinator.data.get(self._tracker_id, {}) if self._coordinator.data else {}
+        data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
         self._attr_latitude = float(data.get("latitude")) if data.get("latitude") else None
         self._attr_longitude = float(data.get("longitude")) if data.get("longitude") else None
         self._attr_location_accuracy = float(data.get("accuracy")) if data.get("accuracy") else None

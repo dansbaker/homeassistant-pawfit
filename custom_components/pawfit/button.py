@@ -37,7 +37,7 @@ class PawfitFindModeButton(ButtonEntity):
         """Handle the button press."""
         try:
             # Check if find mode is currently active
-            data = self._coordinator.data.get(self._tracker_id, {}) if self._coordinator.data else {}
+            data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
             find_timer = data.get("find_timer", 0)
             
             if find_timer and find_timer > 0:
@@ -131,7 +131,7 @@ class PawfitLightModeButton(ButtonEntity):
         """Handle the button press."""
         try:
             # Check if light mode is currently active
-            data = self._coordinator.data.get(self._tracker_id, {}) if self._coordinator.data else {}
+            data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
             light_timer = data.get("light_timer", 0)
             
             if light_timer and light_timer > 0:
@@ -225,7 +225,7 @@ class PawfitAlarmModeButton(ButtonEntity):
         """Handle the button press."""
         try:
             # Check if alarm mode is currently active
-            data = self._coordinator.data.get(self._tracker_id, {}) if self._coordinator.data else {}
+            data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
             alarm_timer = data.get("alarm_timer", 0)
             
             if alarm_timer and alarm_timer > 0:

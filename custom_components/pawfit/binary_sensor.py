@@ -32,7 +32,7 @@ class PawfitChargingSensor(BinarySensorEntity):
         """Return True if the device is charging."""
         if self._coordinator.data is None:
             return None
-        data = self._coordinator.data.get(self._tracker_id, {})
+        data = self._coordinator.data.get(str(self._tracker_id), {})
         battery_raw = data.get("battery")
         if battery_raw is not None:
             return int(battery_raw) < 0
@@ -79,7 +79,7 @@ class PawfitFindModeActive(BinarySensorEntity):
         if self._coordinator.data is None:
             return False
         
-        data = self._coordinator.data.get(self._tracker_id, {})
+        data = self._coordinator.data.get(str(self._tracker_id), {})
         find_timer = data.get("find_timer")
         
         _LOGGER.debug(f"Find mode check for tracker {self._tracker_id}: find_timer={find_timer}")
@@ -151,7 +151,7 @@ class PawfitLightModeActive(BinarySensorEntity):
         if self._coordinator.data is None:
             return False
         
-        data = self._coordinator.data.get(self._tracker_id, {})
+        data = self._coordinator.data.get(str(self._tracker_id), {})
         light_timer_start = data.get("light_timer")
         
         _LOGGER.debug(f"Light mode check for tracker {self._tracker_id}: light_timer={light_timer_start}")
@@ -223,7 +223,7 @@ class PawfitAlarmModeActive(BinarySensorEntity):
         if self._coordinator.data is None:
             return False
         
-        data = self._coordinator.data.get(self._tracker_id, {})
+        data = self._coordinator.data.get(str(self._tracker_id), {})
         alarm_timer = data.get("alarm_timer")
         
         _LOGGER.debug(f"Alarm mode check for tracker {self._tracker_id}: alarm_timer={alarm_timer}")
