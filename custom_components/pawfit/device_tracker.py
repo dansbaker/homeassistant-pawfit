@@ -35,15 +35,19 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         # Fetch latest location data for all trackers
+        self.logger.debug(f"Fetching location data for trackers: {self.tracker_ids}")
         location_data = await self.client.async_get_locations(self.tracker_ids)
+        self.logger.debug(f"Location data fetched successfully, keys: {list(location_data.keys()) if location_data else 'No data'}")
         
         # Fetch detailed status data including timers
         try:
+            self.logger.debug(f"Fetching detailed status for trackers: {self.tracker_ids}")
             detailed_status = await self.client.async_get_detailed_status(self.tracker_ids)
-            self.logger.debug(f"Detailed status response: {detailed_status}")
+            self.logger.debug(f"Detailed status response type: {type(detailed_status)}, content: {detailed_status}")
             
             # If detailed_status is a list, convert to dict by tracker ID
             if isinstance(detailed_status, list):
+                self.logger.debug(f"Converting detailed_status list to dict, list length: {len(detailed_status)}")
                 detailed_dict = {}
                 for item in detailed_status:
                     tracker_id = item.get("tracker") or item.get("tracker_id") or item.get("id")
@@ -51,8 +55,15 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
                     if tracker_id:
                         detailed_dict[str(tracker_id)] = item
                         self.logger.debug(f"Added tracker {tracker_id} to detailed_dict with timers: timerGps={item.get('timerGps', 'missing')}, timerLight={item.get('timerLight', 'missing')}, timerSpeaker={item.get('timerSpeaker', 'missing')}")
+                    else:
+                        self.logger.warning(f"Could not extract tracker_id from detailed status item: {item}")
                 detailed_status = detailed_dict
                 self.logger.debug(f"Converted detailed_status list to dict with keys: {list(detailed_status.keys())}")
+            elif isinstance(detailed_status, dict):
+                self.logger.debug(f"Detailed status is already a dict with keys: {list(detailed_status.keys())}")
+            else:
+                self.logger.error(f"Unexpected detailed_status type: {type(detailed_status)}, content: {detailed_status}")
+                detailed_status = {}
             
             self.logger.debug(f"Location data keys: {list(location_data.keys()) if location_data else 'No location data'}")
             self.logger.debug(f"Detailed status keys: {list(detailed_status.keys()) if isinstance(detailed_status, dict) else f'Not dict: {type(detailed_status)}'}")
@@ -67,6 +78,8 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
                     timer_light = tracker_info.get("timerLight", 0)
                     timer_speaker = tracker_info.get("timerSpeaker", 0)
                     
+                    self.logger.debug(f"Extracted timer values for tracker {tracker_id_str}: timerGps={timer_gps}, timerLight={timer_light}, timerSpeaker={timer_speaker}")
+                    
                     location_data[tracker_id_str].update({
                         "find_timer": timer_gps,
                         "light_timer": timer_light, 
@@ -75,11 +88,12 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
                     self.logger.debug(f"Updated tracker {tracker_id_str} with timers: find_timer={timer_gps}, light_timer={timer_light}, alarm_timer={timer_speaker}")
                     self.logger.debug(f"Final location_data for tracker {tracker_id_str}: {location_data[tracker_id_str]}")
                 else:
-                    self.logger.warning(f"Tracker {tracker_id_str} from detailed status not found in location_data")
+                    self.logger.warning(f"Tracker {tracker_id_str} from detailed status not found in location_data. Available location data keys: {list(location_data.keys())}")
         except Exception as e:
-            self.logger.warning(f"Failed to fetch detailed status: {e}")
+            self.logger.error(f"Failed to fetch detailed status: {e}", exc_info=True)
             # Continue with just location data if detailed status fails
-        
+            
+        self.logger.debug(f"Final coordinator data being returned: {location_data}")
         return location_data
 
 class PawfitDeviceTracker(TrackerEntity):
