@@ -79,11 +79,9 @@ class PawfitTimestampSensor(SensorEntity):
     def native_value(self):
         """Return the timestamp as a datetime object."""
         if self._coordinator.data is None:
-            logging.warning(f"Tracker {self._tracker_id}: No coordinator data available")
             return None
         
         data = self._coordinator.data.get(str(self._tracker_id), {})
-        logging.warning(f"Tracker {self._tracker_id}: Processing timestamp sensor, data keys: {list(data.keys()) if data else 'None'}")
         
         if self._kind == "last_update":
             # Get the timestamp from the raw API data
@@ -92,19 +90,15 @@ class PawfitTimestampSensor(SensorEntity):
             location_data = state_data.get("location", {})
             utc_timestamp = location_data.get("utcDateTime")
             
-            logging.warning(f"Tracker {self._tracker_id} timestamp extraction: raw_data exists={raw_data is not None}, state_data exists={state_data is not None}, location_data exists={location_data is not None}, utc_timestamp={utc_timestamp}")
-            
             if utc_timestamp:
                 try:
-                    # Since we're in 2025, treat as seconds (not milliseconds)
                     dt = datetime.fromtimestamp(utc_timestamp, timezone.utc)
-                    logging.warning(f"Tracker {self._tracker_id} successfully converted timestamp {utc_timestamp} to datetime: {dt}")
                     return dt
                 except (ValueError, TypeError) as e:
                     logging.error(f"Tracker {self._tracker_id} failed to convert timestamp {utc_timestamp}: {e}")
                     return None
             else:
-                logging.error(f"Tracker {self._tracker_id}: No utcDateTime found in location data. Location data: {location_data}")
+                logging.error(f"Tracker {self._tracker_id}: No utcDateTime found in location data")
         
         logging.error(f"Tracker {self._tracker_id}: Returning None for timestamp sensor")
         return None
@@ -152,13 +146,10 @@ class PawfitTimerSensor(SensorEntity):
     def native_value(self):
         """Return the remaining time in seconds."""
         if self._coordinator.data is None:
-            _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: coordinator data is None")
             return 0
         
         data = self._coordinator.data.get(str(self._tracker_id), {})
         timer_start = data.get(self._timer_type, 0)
-        
-        _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: timer_start={timer_start}, all_data_keys={list(data.keys()) if data else 'No data'}")
         
         if timer_start and timer_start > 0:
             try:
@@ -171,8 +162,6 @@ class PawfitTimerSensor(SensorEntity):
                 # 10 minutes = 600 seconds
                 remaining_seconds = 600 - elapsed_seconds
                 
-                _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: timer_start_sec={timer_start_seconds}, current={current_time_seconds}, elapsed={elapsed_seconds}, remaining={remaining_seconds}")
-                
                 if remaining_seconds > 0:
                     return int(remaining_seconds)
                 else:
@@ -180,8 +169,7 @@ class PawfitTimerSensor(SensorEntity):
             except (ValueError, TypeError):
                 _LOGGER.warning(f"Invalid timer value for {self._timer_type} on tracker {self._tracker_id}: {timer_start}")
                 return 0
-        else:
-            _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: timer is 0 or None, returning 0")
+        
         return 0
 
     @property

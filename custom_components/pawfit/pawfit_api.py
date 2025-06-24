@@ -17,13 +17,11 @@ class PawfitApiClient:
         url = BASE_URL + "login/1/1"
         params = {"user": self._username, "pwd": self._password}
         headers = {"User-Agent": USER_AGENT}
-        self._logger.debug(f"Pawfit login request: url={url}, params={params}, headers={headers}")
+        
         async with self._session.get(url, params=params, headers=headers) as resp:
-            self._logger.debug(f"Pawfit login raw response headers: {dict(resp.headers)}")
             resp_text = await resp.text()
-            self._logger.debug(f"Pawfit login response: status={resp.status}, body={resp_text}")
             if resp.status != 200:
-                self._logger.error(f"Pawfit login failed: status={resp.status}, body={resp_text}")
+                self._logger.error(f"Pawfit login failed: status={resp.status}")
                 raise Exception("Incorrect username or password for Pawfit API")
             try:
                 # Try to parse as JSON, fallback to manual loads if mimetype is wrong
@@ -34,15 +32,15 @@ class PawfitApiClient:
                     import json
                     data = json.loads(resp_text)
             except Exception as e:
-                self._logger.error(f"Failed to parse JSON from Pawfit login response: {e}, body={resp_text}")
+                self._logger.error(f"Failed to parse JSON from Pawfit login response: {e}")
                 raise Exception("Invalid response from Pawfit API")
-            self._logger.debug(f"Pawfit login parsed JSON: {data}")
+            
             data_field = data.get("data", {})
             user_id = data_field.get("userId")
             session_id = data_field.get("sessionId")
-            self._logger.debug(f"Extracted userId={user_id}, sessionId={session_id} from login response")
+            
             if not user_id or not session_id:
-                self._logger.error(f"No userId or sessionId returned from Pawfit API. data_field={data_field}")
+                self._logger.error(f"No userId or sessionId returned from Pawfit API")
                 raise Exception("No userId or sessionId returned from Pawfit API. Check your credentials.")
             self._token = session_id
             self._user_id = user_id
@@ -62,10 +60,8 @@ class PawfitApiClient:
     async def _request_with_reauth(self, method, url, headers, append_auth=True, **kwargs):
         if append_auth:
             url = self._append_auth_to_url(url)
-        self._logger.debug(f"Pawfit API request: method={method}, url={url}, headers={headers}, kwargs={kwargs}")
         resp = await self._session.request(method, url, headers=headers, **kwargs)
         resp_text = await resp.text()
-        self._logger.debug(f"Pawfit API response: status={resp.status}, body={resp_text}")
         if resp.status == 403:
             self._logger.warning("Pawfit API 403 received, attempting re-authentication.")
             login_data = await self.async_login()
@@ -73,25 +69,19 @@ class PawfitApiClient:
             self._token = login_data["sessionId"]
             if append_auth:
                 url = self._append_auth_to_url(url.split("/", 1)[0])
-            self._logger.debug(f"Retrying Pawfit API request after re-auth: method={method}, url={url}, headers={headers}, kwargs={kwargs}")
             resp = await self._session.request(method, url, headers=headers, **kwargs)
             resp_text = await resp.text()
-            self._logger.debug(f"Pawfit API retry response: status={resp.status}, body={resp_text}")
         return resp
 
     async def async_get_trackers(self) -> list:
         """Fetch the list of tracker devices for the authenticated user."""
-        self._logger.debug("Starting async_get_trackers call")
         # Ensure we are authenticated before making the request
         if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
-            self._logger.debug("Not authenticated, calling async_login() before fetching trackers")
             await self.async_login()
         url = f"{BASE_URL}listpetinvitee/1/1"
         headers = {"User-Agent": USER_AGENT}
-        self._logger.debug(f"Requesting tracker list: url={url}, headers={headers}")
         resp = await self._request_with_reauth("GET", url, headers)
         resp_text = await resp.text()
-        self._logger.debug(f"Raw tracker list response: {resp_text}")
         try:
             try:
                 data = await resp.json()
@@ -133,7 +123,6 @@ class PawfitApiClient:
 
     async def async_get_locations(self, tracker_ids: list) -> dict:
         """Fetch the latest location data for specified trackers."""
-        self._logger.debug(f"Starting async_get_locations for tracker_ids={tracker_ids}")
         url = f"{BASE_URL}getlocationcaches/1/1"
         headers = {"User-Agent": USER_AGENT}
         tracker_ids_str = ",".join(str(tid) for tid in tracker_ids)
