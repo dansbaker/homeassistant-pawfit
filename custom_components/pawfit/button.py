@@ -117,7 +117,7 @@ class PawfitLightModeButton(ButtonEntity):
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
             "model": tracker.get("model", "Unknown"),
-            "manufacturer": "PawFit",
+            "manufacturer": "PawFit"
         }
 
     @property
@@ -210,7 +210,7 @@ class PawfitAlarmModeButton(ButtonEntity):
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
             "model": tracker.get("model", "Unknown"),
-            "manufacturer": "PawFit",
+            "manufacturer": "PawFit"
         }
 
     @property
