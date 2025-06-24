@@ -38,14 +38,14 @@ class PawfitFindModeButton(ButtonEntity):
         try:
             # Check if find mode is currently active
             data = self._coordinator.data.get(self._tracker_id, {}) if self._coordinator.data else {}
-            timer = data.get("timer", 0)
+            find_timer = data.get("find_timer", 0)
             
-            if timer and timer > 0:
+            if find_timer and find_timer > 0:
                 # Check if within 10 minutes (active)
                 import time
                 try:
                     # Timer values from API are in milliseconds, convert to seconds
-                    timer_start_seconds = timer / 1000.0
+                    timer_start_seconds = find_timer / 1000.0
                     current_time_seconds = time.time()
                     elapsed_seconds = current_time_seconds - timer_start_seconds
                     is_active = elapsed_seconds < 600  # 10 minutes
@@ -226,14 +226,14 @@ class PawfitAlarmModeButton(ButtonEntity):
         try:
             # Check if alarm mode is currently active
             data = self._coordinator.data.get(self._tracker_id, {}) if self._coordinator.data else {}
-            timer_speaker = data.get("timerSpeaker", 0)
+            alarm_timer = data.get("alarm_timer", 0)
             
-            if timer_speaker and timer_speaker > 0:
+            if alarm_timer and alarm_timer > 0:
                 # Check if within 10 minutes (active)
                 import time
                 try:
                     # Timer values from API are in milliseconds, convert to seconds
-                    timer_start_seconds = timer_speaker / 1000.0
+                    timer_start_seconds = alarm_timer / 1000.0
                     current_time_seconds = time.time()
                     elapsed_seconds = current_time_seconds - timer_start_seconds
                     is_active = elapsed_seconds < 600  # 10 minutes

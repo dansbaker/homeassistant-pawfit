@@ -55,13 +55,13 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             for tracker_id_str, tracker_info in detailed_status.items():
                 if tracker_id_str in location_data:
                     # Add timer and status information from detailed status
-                    # Map the timer fields from API response to our expected names
+                    # Map the timer fields from API response to consistent names
                     location_data[tracker_id_str].update({
-                        "timer": tracker_info.get("timerGps", 0),
+                        "find_timer": tracker_info.get("timerGps", 0),
                         "light_timer": tracker_info.get("timerLight", 0), 
-                        "timerSpeaker": tracker_info.get("timerSpeaker", 0)
+                        "alarm_timer": tracker_info.get("timerSpeaker", 0)
                     })
-                    self.logger.debug(f"Updated tracker {tracker_id_str} with timers: timerGps={tracker_info.get('timerGps', 0)}, timerLight={tracker_info.get('timerLight', 0)}, timerSpeaker={tracker_info.get('timerSpeaker', 0)}")
+                    self.logger.debug(f"Updated tracker {tracker_id_str} with timers: find_timer={tracker_info.get('timerGps', 0)}, light_timer={tracker_info.get('timerLight', 0)}, alarm_timer={tracker_info.get('timerSpeaker', 0)}")
         except Exception as e:
             self.logger.warning(f"Failed to fetch detailed status: {e}")
             # Continue with just location data if detailed status fails

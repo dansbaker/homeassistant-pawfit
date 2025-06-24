@@ -80,21 +80,21 @@ class PawfitFindModeActive(BinarySensorEntity):
             return False
         
         data = self._coordinator.data.get(self._tracker_id, {})
-        timer_start = data.get("timer")
+        find_timer = data.get("find_timer")
         
-        if timer_start is None or timer_start == 0:
+        if find_timer is None or find_timer == 0:
             return False
         
         # Check if within 10 minutes (600 seconds) of timer start
         try:
             import time
             # Timer values from API are in milliseconds, convert to seconds
-            timer_start_seconds = timer_start / 1000.0
+            timer_start_seconds = find_timer / 1000.0
             current_time_seconds = time.time()
             elapsed_seconds = current_time_seconds - timer_start_seconds
             return elapsed_seconds < 600  # 10 minutes
         except (ValueError, TypeError):
-            _LOGGER.warning("Invalid timer value for tracker %s: %s", self._tracker_id, timer_start)
+            _LOGGER.warning("Invalid find timer value for tracker %s: %s", self._tracker_id, find_timer)
             return False
 
     @property
@@ -198,21 +198,21 @@ class PawfitAlarmModeActive(BinarySensorEntity):
             return False
         
         data = self._coordinator.data.get(self._tracker_id, {})
-        timer_speaker = data.get("timerSpeaker")
+        alarm_timer = data.get("alarm_timer")
         
-        if timer_speaker is None or timer_speaker == 0:
+        if alarm_timer is None or alarm_timer == 0:
             return False
         
         # Check if within 10 minutes (600 seconds) of timer start
         try:
             import time
             # Timer values from API are in milliseconds, convert to seconds
-            timer_start_seconds = timer_speaker / 1000.0
+            timer_start_seconds = alarm_timer / 1000.0
             current_time_seconds = time.time()
             elapsed_seconds = current_time_seconds - timer_start_seconds
             return elapsed_seconds < 600  # 10 minutes
         except (ValueError, TypeError):
-            _LOGGER.warning("Invalid timer speaker value for tracker %s: %s", self._tracker_id, timer_speaker)
+            _LOGGER.warning("Invalid alarm timer value for tracker %s: %s", self._tracker_id, alarm_timer)
             return False
 
     @property

@@ -228,8 +228,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.append(PawfitSensor(tracker, coordinator, "accuracy", "Location Accuracy", unit="m", icon="mdi:map-marker-radius"))
         entities.append(PawfitSensor(tracker, coordinator, "signal", "Signal Strength", unit="dBm", icon="mdi:wifi-strength-3", device_class=SensorDeviceClass.SIGNAL_STRENGTH))
         entities.append(PawfitTimestampSensor(tracker, coordinator, "last_update", "Last Time Seen", icon="mdi:clock-outline"))
-        entities.append(PawfitTimerSensor(tracker, coordinator, "timer", "Find Mode Timer", icon="mdi:crosshairs-gps"))
+        entities.append(PawfitTimerSensor(tracker, coordinator, "find_timer", "Find Mode Timer", icon="mdi:crosshairs-gps"))
         entities.append(PawfitTimerSensor(tracker, coordinator, "light_timer", "Light Mode Timer", icon="mdi:lightbulb-on"))
-        entities.append(PawfitTimerSensor(tracker, coordinator, "timerSpeaker", "Alarm Mode Timer", icon="mdi:alarm-light"))
+        entities.append(PawfitTimerSensor(tracker, coordinator, "alarm_timer", "Alarm Mode Timer", icon="mdi:alarm-light"))
     
     async_add_entities(entities)
