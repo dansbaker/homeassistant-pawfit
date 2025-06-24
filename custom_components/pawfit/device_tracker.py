@@ -62,6 +62,10 @@ class PawfitDeviceTracker(TrackerEntity):
 
     @property
     def battery_level(self):
+        """Return battery level as a positive integer."""
+        if self._attr_battery_level is not None:
+            # Ensure we always return a positive value
+            return abs(self._attr_battery_level)
         return self._attr_battery_level
 
     @property
@@ -91,10 +95,12 @@ class PawfitDeviceTracker(TrackerEntity):
                 # Negative value indicates charging
                 self._attr_battery_level = abs(battery_value)
                 self._attr_charging = True
+                logging.debug(f"Tracker {self._tracker_id}: Battery charging - raw: {battery_value}, level: {self._attr_battery_level}")
             else:
                 # Positive value indicates not charging
                 self._attr_battery_level = battery_value
                 self._attr_charging = False
+                logging.debug(f"Tracker {self._tracker_id}: Battery not charging - raw: {battery_value}, level: {self._attr_battery_level}")
         else:
             self._attr_battery_level = None
             self._attr_charging = None
