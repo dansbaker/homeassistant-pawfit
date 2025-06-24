@@ -29,7 +29,11 @@ This ensures your main mobile app stays logged in while the integration uses the
 - 📶 **Signal Strength** - View GPS signal quality
 - 🎯 **Location Accuracy** - See GPS accuracy in meters
 - 🕐 **Last Seen** - Track when location was last updated
-- 🐕 **Multiple Pets** - Support for multiple trackers under one account
+- � **Find Mode** - Activate GPS tracking for 10 minutes with button and status sensor
+- 💡 **Light Mode** - Turn on tracker LED light for 10 minutes with button and status sensor
+- 🚨 **Alarm Mode** - Activate tracker alarm for 10 minutes with button and status sensor
+- ⏱️ **Timer Sensors** - View countdown timers for active modes
+- �🐕 **Multiple Pets** - Support for multiple trackers under one account
 - 🏠 **Home Assistant Integration** - Use in automations, scripts, and dashboards
 
 ## Installation
@@ -60,13 +64,42 @@ This ensures your main mobile app stays logged in while the integration uses the
 3. Enter your **NEW** Pawfit account credentials (not your main account!)
 4. Complete the setup
 
+## Available Entities
+
+For each tracker, the integration provides:
+
+### Device Tracker
+- GPS location with accuracy and battery level
+
+### Sensors
+- Battery level (%)
+- Signal strength
+- Location accuracy (meters)
+- Last seen timestamp
+- Find mode timer (countdown in seconds)
+- Light mode timer (countdown in seconds)
+- Alarm mode timer (countdown in seconds)
+
+### Binary Sensors
+- Charging status
+- Find mode active (10-minute duration)
+- Light mode active (10-minute duration)
+- Alarm mode active (10-minute duration)
+
+### Buttons
+- Find mode toggle (activate/deactivate GPS tracking)
+- Light mode toggle (activate/deactivate LED light)
+- Alarm mode toggle (activate/deactivate alarm sound)
+
+Each mode runs for exactly 10 minutes when activated. You can deactivate early by pressing the button again.
+
 ## Beta Status
 
-🚧 **This is BETA software with limited features.**
+🚧 **This is BETA software with expanding features.**
 
 Current limitations:
-- Read-only access (no commands to trackers)
-- Basic location and status information only
+- Limited tracker commands (Find, Light, and Alarm modes only)
+- Basic location and status information
 - No advanced Pawfit features (geofences, activity tracking, etc.)
 
 ## Support & Feature Requests
