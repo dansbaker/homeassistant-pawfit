@@ -208,9 +208,9 @@ class PawfitApiClient:
         self._logger.debug(f"Returning locations: {locations}")
         return locations
 
-    async def async_get_detailed_status(self) -> list:
+    async def async_get_detailed_status(self, tracker_ids: list = None) -> list:
         """Get detailed status information for all trackers including timers."""
-        self._logger.debug("Starting async_get_detailed_status call")
+        self._logger.debug(f"Starting async_get_detailed_status call with tracker_ids={tracker_ids}")
         # Ensure we are authenticated
         if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
             self._logger.debug("Not authenticated, calling async_login() before fetching detailed status")
@@ -218,9 +218,17 @@ class PawfitApiClient:
         
         url = f"{BASE_URL}getlocationcaches/1/1"
         headers = {"User-Agent": USER_AGENT}
-        self._logger.debug(f"Requesting detailed status: url={url}, headers={headers}")
         
-        resp = await self._request_with_reauth("GET", url, headers)
+        # Add tracker IDs as query parameter if provided
+        if tracker_ids:
+            tracker_ids_str = ",".join(str(tid) for tid in tracker_ids)
+            url = self._append_auth_to_url(url)
+            url = f"{url}?trackers={tracker_ids_str}"
+            self._logger.debug(f"Requesting detailed status: url={url}, headers={headers}, tracker_ids_str={tracker_ids_str}")
+            resp = await self._request_with_reauth("GET", url, headers, append_auth=False)
+        else:
+            self._logger.debug(f"Requesting detailed status: url={url}, headers={headers}")
+            resp = await self._request_with_reauth("GET", url, headers)
         resp_text = await resp.text()
         self._logger.debug(f"Raw detailed status response: {resp_text}")
         

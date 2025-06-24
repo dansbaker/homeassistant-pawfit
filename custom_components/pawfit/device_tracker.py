@@ -39,7 +39,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         
         # Fetch detailed status data including timers
         try:
-            detailed_status = await self.client.async_get_detailed_status()
+            detailed_status = await self.client.async_get_detailed_status(self.tracker_ids)
             self.logger.debug(f"Detailed status response: {detailed_status}")
             
             # If detailed_status is a list, convert to dict by tracker ID
