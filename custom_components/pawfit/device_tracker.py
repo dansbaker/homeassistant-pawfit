@@ -23,17 +23,20 @@ except ImportError:
 
 class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, client, trackers):
+        self.logger = logging.getLogger(__name__)
         super().__init__(
             hass,
-            logger=logging.getLogger(__name__),
+            logger=self.logger,
             name=DOMAIN,
             update_interval=timedelta(seconds=60),  # Poll every 60 seconds
         )
         self.client = client
         self.trackers = trackers
         self.tracker_ids = [t["tracker_id"] for t in trackers]
+        self.logger.info(f"PawfitDataUpdateCoordinator initialized with trackers: {self.tracker_ids}")
 
     async def _async_update_data(self):
+        self.logger.info(f"_async_update_data called for trackers: {self.tracker_ids}")
         # Fetch latest location data for all trackers
         self.logger.debug(f"Fetching location data for trackers: {self.tracker_ids}")
         location_data = await self.client.async_get_locations(self.tracker_ids)
