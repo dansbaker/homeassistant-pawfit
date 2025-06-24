@@ -98,12 +98,17 @@ class PawfitFindModeActive(BinarySensorEntity):
             
             _LOGGER.debug(f"Find mode timer check for tracker {self._tracker_id}: timer_start={timer_start_seconds}, current={current_time_seconds}, elapsed={elapsed_seconds}")
             
-            is_active = elapsed_seconds < 600  # 10 minutes
+            is_active = elapsed_seconds < 600 and elapsed_seconds >= 0  # 10 minutes and not in future
             _LOGGER.debug(f"Find mode active for tracker {self._tracker_id}: {is_active}")
-            return is_active
+            return bool(is_active)  # Ensure it's explicitly a boolean
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid find timer value for tracker %s: %s", self._tracker_id, find_timer)
             return False
+
+    @property
+    def state(self):
+        """Return the state of the binary sensor."""
+        return "on" if self.is_on else "off"
 
     @property
     def available(self):
@@ -165,12 +170,17 @@ class PawfitLightModeActive(BinarySensorEntity):
             
             _LOGGER.debug(f"Light mode timer check for tracker {self._tracker_id}: timer_start={timer_start_seconds}, current={current_time_seconds}, elapsed={elapsed_seconds}")
             
-            is_active = elapsed_seconds < 600  # 10 minutes
+            is_active = elapsed_seconds < 600 and elapsed_seconds >= 0  # 10 minutes and not in future
             _LOGGER.debug(f"Light mode active for tracker {self._tracker_id}: {is_active}")
-            return is_active
+            return bool(is_active)  # Ensure it's explicitly a boolean
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid light timer value for tracker %s: %s", self._tracker_id, light_timer_start)
             return False
+
+    @property
+    def state(self):
+        """Return the state of the binary sensor."""
+        return "on" if self.is_on else "off"
 
     @property
     def available(self):
@@ -232,12 +242,17 @@ class PawfitAlarmModeActive(BinarySensorEntity):
             
             _LOGGER.debug(f"Alarm mode timer check for tracker {self._tracker_id}: timer_start={timer_start_seconds}, current={current_time_seconds}, elapsed={elapsed_seconds}")
             
-            is_active = elapsed_seconds < 600  # 10 minutes
+            is_active = elapsed_seconds < 600 and elapsed_seconds >= 0  # 10 minutes and not in future
             _LOGGER.debug(f"Alarm mode active for tracker {self._tracker_id}: {is_active}")
-            return is_active
+            return bool(is_active)  # Ensure it's explicitly a boolean
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid alarm timer value for tracker %s: %s", self._tracker_id, alarm_timer)
             return False
+
+    @property
+    def state(self):
+        """Return the state of the binary sensor."""
+        return "on" if self.is_on else "off"
 
     @property
     def available(self):

@@ -152,12 +152,13 @@ class PawfitTimerSensor(SensorEntity):
     def native_value(self):
         """Return the remaining time in seconds."""
         if self._coordinator.data is None:
+            _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: coordinator data is None")
             return 0
         
         data = self._coordinator.data.get(self._tracker_id, {})
         timer_start = data.get(self._timer_type, 0)
         
-        _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: timer_start={timer_start}")
+        _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: timer_start={timer_start}, all_data_keys={list(data.keys()) if data else 'No data'}")
         
         if timer_start and timer_start > 0:
             try:
@@ -179,6 +180,8 @@ class PawfitTimerSensor(SensorEntity):
             except (ValueError, TypeError):
                 _LOGGER.warning(f"Invalid timer value for {self._timer_type} on tracker {self._tracker_id}: {timer_start}")
                 return 0
+        else:
+            _LOGGER.debug(f"Timer sensor {self._timer_type} for tracker {self._tracker_id}: timer is 0 or None, returning 0")
         return 0
 
     @property

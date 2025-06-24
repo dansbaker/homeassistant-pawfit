@@ -73,6 +73,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
                         "alarm_timer": timer_speaker
                     })
                     self.logger.debug(f"Updated tracker {tracker_id_str} with timers: find_timer={timer_gps}, light_timer={timer_light}, alarm_timer={timer_speaker}")
+                    self.logger.debug(f"Final location_data for tracker {tracker_id_str}: {location_data[tracker_id_str]}")
                 else:
                     self.logger.warning(f"Tracker {tracker_id_str} from detailed status not found in location_data")
         except Exception as e:
