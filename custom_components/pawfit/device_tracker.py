@@ -23,20 +23,68 @@ except ImportError:
 
 class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, client, trackers):
+        self.logger = logging.getLogger(__name__)
         super().__init__(
             hass,
-            logger=logging.getLogger(__name__),
+            logger=self.logger,
             name=DOMAIN,
             update_interval=timedelta(seconds=60),  # Poll every 60 seconds
         )
         self.client = client
         self.trackers = trackers
         self.tracker_ids = [t["tracker_id"] for t in trackers]
+        self.logger.info(f"PawfitDataUpdateCoordinator initialized with trackers: {self.tracker_ids}")
 
     async def _async_update_data(self):
+        self.logger.info(f"_async_update_data called for trackers: {self.tracker_ids}")
         # Fetch latest location data for all trackers
-        data = await self.client.async_get_locations(self.tracker_ids)
-        return data
+        location_data = await self.client.async_get_locations(self.tracker_ids)
+        
+        # Convert location_data keys to strings for consistency with detailed_status keys
+        if location_data:
+            location_data_str_keys = {str(k): v for k, v in location_data.items()}
+            location_data = location_data_str_keys
+        
+        # Fetch detailed status data including timers
+        try:
+            detailed_status = await self.client.async_get_detailed_status(self.tracker_ids)
+            
+            # If detailed_status is a list, convert to dict by tracker ID
+            if isinstance(detailed_status, list):
+                detailed_dict = {}
+                for item in detailed_status:
+                    tracker_id = item.get("tracker") or item.get("tracker_id") or item.get("id")
+                    if tracker_id:
+                        detailed_dict[str(tracker_id)] = item
+                    else:
+                        self.logger.warning(f"Could not extract tracker_id from detailed status item: {item}")
+                detailed_status = detailed_dict
+            elif isinstance(detailed_status, dict):
+                pass  # Already in correct format
+            else:
+                self.logger.error(f"Unexpected detailed_status type: {type(detailed_status)}, content: {detailed_status}")
+                detailed_status = {}
+            
+            # Merge the data by tracker ID
+            for tracker_id_str, tracker_info in detailed_status.items():
+                if tracker_id_str in location_data:
+                    # Add timer and status information from detailed status
+                    timer_gps = tracker_info.get("timerGps", 0)
+                    timer_light = tracker_info.get("timerLight", 0)
+                    timer_speaker = tracker_info.get("timerSpeaker", 0)
+                    
+                    location_data[tracker_id_str].update({
+                        "find_timer": timer_gps,
+                        "light_timer": timer_light, 
+                        "alarm_timer": timer_speaker
+                    })
+                else:
+                    self.logger.warning(f"Tracker {tracker_id_str} from detailed status not found in location_data. Available location data keys: {list(location_data.keys())}")
+        except Exception as e:
+            self.logger.error(f"Failed to fetch detailed status: {e}", exc_info=True)
+            # Continue with just location data if detailed status fails
+            
+        return location_data
 
 class PawfitDeviceTracker(TrackerEntity):
     def __init__(self, tracker, coordinator):
@@ -82,7 +130,7 @@ class PawfitDeviceTracker(TrackerEntity):
         return self._coordinator.last_update_success and self._attr_latitude is not None and self._attr_longitude is not None
 
     def _update_attrs(self):
-        data = self._coordinator.data.get(self._tracker_id, {}) if self._coordinator.data else {}
+        data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
         self._attr_latitude = float(data.get("latitude")) if data.get("latitude") else None
         self._attr_longitude = float(data.get("longitude")) if data.get("longitude") else None
         self._attr_location_accuracy = float(data.get("accuracy")) if data.get("accuracy") else None
@@ -105,13 +153,9 @@ class PawfitDeviceTracker(TrackerEntity):
             self._attr_battery_level = None
             self._attr_charging = None
         
-        # Only log if we have location data or if something is wrong
-        if self._attr_latitude and self._attr_longitude:
-            logging.debug(f"Tracker {self._tracker_id}: Updated location to {self._attr_latitude}, {self._attr_longitude}")
-        elif data:
-            logging.warning(f"Tracker {self._tracker_id}: No location data in: {data}")
-        else:
-            logging.warning(f"Tracker {self._tracker_id}: No data available from coordinator")
+        # Only log if there's an issue
+        if not (self._attr_latitude and self._attr_longitude) and data:
+            logging.warning(f"Tracker {self._tracker_id}: No location data available")
 
     async def async_update(self):
         await self._coordinator.async_request_refresh()
