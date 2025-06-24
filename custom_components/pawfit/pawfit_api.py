@@ -241,7 +241,24 @@ class PawfitApiClient:
             self._logger.error(f"Detailed status API returned failure: {data}")
             raise Exception("Detailed status API returned failure")
         
-        return data.get("data", [])
+        # Log the actual structure to help with debugging
+        detailed_data = data.get("data", [])
+        self._logger.debug(f"Detailed status data type: {type(detailed_data)}")
+        if isinstance(detailed_data, dict):
+            for tracker_id, tracker_data in detailed_data.items():
+                self._logger.debug(f"Tracker {tracker_id} detailed data keys: {list(tracker_data.keys()) if isinstance(tracker_data, dict) else 'Not a dict'}")
+                if isinstance(tracker_data, dict):
+                    # Look for timer-related fields
+                    timer_fields = {k: v for k, v in tracker_data.items() if 'timer' in k.lower()}
+                    self._logger.debug(f"Tracker {tracker_id} timer fields: {timer_fields}")
+        elif isinstance(detailed_data, list):
+            for item in detailed_data:
+                if isinstance(item, dict):
+                    self._logger.debug(f"List item keys: {list(item.keys())}")
+                    timer_fields = {k: v for k, v in item.items() if 'timer' in k.lower()}
+                    self._logger.debug(f"List item timer fields: {timer_fields}")
+        
+        return detailed_data
 
     async def async_start_find_mode(self, tracker_id: str) -> bool:
         """Start find mode for a specific tracker."""

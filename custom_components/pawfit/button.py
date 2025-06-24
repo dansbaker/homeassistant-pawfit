@@ -42,12 +42,13 @@ class PawfitFindModeButton(ButtonEntity):
             
             if timer and timer > 0:
                 # Check if within 10 minutes (active)
-                from datetime import datetime
+                import time
                 try:
-                    start_time = datetime.fromtimestamp(timer)
-                    current_time = datetime.now()
-                    elapsed = current_time - start_time
-                    is_active = elapsed.total_seconds() < 600  # 10 minutes
+                    # Timer values from API are in milliseconds, convert to seconds
+                    timer_start_seconds = timer / 1000.0
+                    current_time_seconds = time.time()
+                    elapsed_seconds = current_time_seconds - timer_start_seconds
+                    is_active = elapsed_seconds < 600  # 10 minutes
                     
                     if is_active:
                         # Find mode is active, so stop it
@@ -135,12 +136,13 @@ class PawfitLightModeButton(ButtonEntity):
             
             if light_timer and light_timer > 0:
                 # Check if within 10 minutes (active)
-                from datetime import datetime
+                import time
                 try:
-                    start_time = datetime.fromtimestamp(light_timer)
-                    current_time = datetime.now()
-                    elapsed = current_time - start_time
-                    is_active = elapsed.total_seconds() < 600  # 10 minutes
+                    # Timer values from API are in milliseconds, convert to seconds
+                    timer_start_seconds = light_timer / 1000.0
+                    current_time_seconds = time.time()
+                    elapsed_seconds = current_time_seconds - timer_start_seconds
+                    is_active = elapsed_seconds < 600  # 10 minutes
                     
                     if is_active:
                         # Light mode is active, so stop it
@@ -228,12 +230,13 @@ class PawfitAlarmModeButton(ButtonEntity):
             
             if timer_speaker and timer_speaker > 0:
                 # Check if within 10 minutes (active)
-                from datetime import datetime
+                import time
                 try:
-                    start_time = datetime.fromtimestamp(timer_speaker)
-                    current_time = datetime.now()
-                    elapsed = current_time - start_time
-                    is_active = elapsed.total_seconds() < 600  # 10 minutes
+                    # Timer values from API are in milliseconds, convert to seconds
+                    timer_start_seconds = timer_speaker / 1000.0
+                    current_time_seconds = time.time()
+                    elapsed_seconds = current_time_seconds - timer_start_seconds
+                    is_active = elapsed_seconds < 600  # 10 minutes
                     
                     if is_active:
                         # Alarm mode is active, so stop it

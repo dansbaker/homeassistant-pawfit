@@ -157,11 +157,11 @@ class PawfitTimerSensor(SensorEntity):
         
         if timer_start and timer_start > 0:
             try:
-                from datetime import datetime
-                start_time = datetime.fromtimestamp(timer_start)
-                current_time = datetime.now()
-                elapsed = current_time - start_time
-                elapsed_seconds = elapsed.total_seconds()
+                import time
+                # Timer values from API are in milliseconds, convert to seconds
+                timer_start_seconds = timer_start / 1000.0
+                current_time_seconds = time.time()
+                elapsed_seconds = current_time_seconds - timer_start_seconds
                 
                 # 10 minutes = 600 seconds
                 remaining_seconds = 600 - elapsed_seconds

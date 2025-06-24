@@ -40,18 +40,30 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         # Fetch detailed status data including timers
         try:
             detailed_status = await self.client.async_get_detailed_status()
+            self.logger.debug(f"Detailed status response: {detailed_status}")
+            
+            # If detailed_status is a list, convert to dict by tracker ID
+            if isinstance(detailed_status, list):
+                detailed_dict = {}
+                for item in detailed_status:
+                    tracker_id = item.get("tracker") or item.get("tracker_id") or item.get("id")
+                    if tracker_id:
+                        detailed_dict[str(tracker_id)] = item
+                detailed_status = detailed_dict
             
             # Merge the data by tracker ID
-            for tracker_info in detailed_status:
-                tracker_id = tracker_info.get("tracker")
-                if tracker_id and tracker_id in location_data:
-                    # Add timer and status information
-                    location_data[tracker_id].update({
-                        "timer_gps": tracker_info.get("timerGps", 0),
-                        "timer_light": tracker_info.get("timerLight", 0)
+            for tracker_id_str, tracker_info in detailed_status.items():
+                if tracker_id_str in location_data:
+                    # Add timer and status information from detailed status
+                    # Map the timer fields from API response to our expected names
+                    location_data[tracker_id_str].update({
+                        "timer": tracker_info.get("timerGps", 0),
+                        "light_timer": tracker_info.get("timerLight", 0), 
+                        "timerSpeaker": tracker_info.get("timerSpeaker", 0)
                     })
+                    self.logger.debug(f"Updated tracker {tracker_id_str} with timers: timerGps={tracker_info.get('timerGps', 0)}, timerLight={tracker_info.get('timerLight', 0)}, timerSpeaker={tracker_info.get('timerSpeaker', 0)}")
         except Exception as e:
-            logging.warning(f"Failed to fetch detailed status: {e}")
+            self.logger.warning(f"Failed to fetch detailed status: {e}")
             # Continue with just location data if detailed status fails
         
         return location_data

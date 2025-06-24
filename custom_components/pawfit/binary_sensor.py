@@ -87,10 +87,12 @@ class PawfitFindModeActive(BinarySensorEntity):
         
         # Check if within 10 minutes (600 seconds) of timer start
         try:
-            start_time = datetime.fromtimestamp(timer_start)
-            current_time = datetime.now()
-            elapsed = current_time - start_time
-            return elapsed.total_seconds() < 600  # 10 minutes
+            import time
+            # Timer values from API are in milliseconds, convert to seconds
+            timer_start_seconds = timer_start / 1000.0
+            current_time_seconds = time.time()
+            elapsed_seconds = current_time_seconds - timer_start_seconds
+            return elapsed_seconds < 600  # 10 minutes
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid timer value for tracker %s: %s", self._tracker_id, timer_start)
             return False
@@ -144,10 +146,12 @@ class PawfitLightModeActive(BinarySensorEntity):
         
         # Check if within 10 minutes (600 seconds) of timer start
         try:
-            start_time = datetime.fromtimestamp(light_timer_start)
-            current_time = datetime.now()
-            elapsed = current_time - start_time
-            return elapsed.total_seconds() < 600  # 10 minutes
+            import time
+            # Timer values from API are in milliseconds, convert to seconds
+            timer_start_seconds = light_timer_start / 1000.0
+            current_time_seconds = time.time()
+            elapsed_seconds = current_time_seconds - timer_start_seconds
+            return elapsed_seconds < 600  # 10 minutes
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid light timer value for tracker %s: %s", self._tracker_id, light_timer_start)
             return False
@@ -201,10 +205,12 @@ class PawfitAlarmModeActive(BinarySensorEntity):
         
         # Check if within 10 minutes (600 seconds) of timer start
         try:
-            start_time = datetime.fromtimestamp(timer_speaker)
-            current_time = datetime.now()
-            elapsed = current_time - start_time
-            return elapsed.total_seconds() < 600  # 10 minutes
+            import time
+            # Timer values from API are in milliseconds, convert to seconds
+            timer_start_seconds = timer_speaker / 1000.0
+            current_time_seconds = time.time()
+            elapsed_seconds = current_time_seconds - timer_start_seconds
+            return elapsed_seconds < 600  # 10 minutes
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid timer speaker value for tracker %s: %s", self._tracker_id, timer_speaker)
             return False
