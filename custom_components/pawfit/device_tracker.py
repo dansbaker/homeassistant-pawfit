@@ -35,6 +35,54 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         self.tracker_ids = [t["tracker_id"] for t in trackers]
         self.logger.info(f"PawfitDataUpdateCoordinator initialized with trackers: {self.tracker_ids}")
 
+    def _check_any_mode_active(self, data):
+        """Check if any tracker has an active mode (find, light, or alarm)."""
+        if not data:
+            return False
+        
+        for tracker_id_str, tracker_data in data.items():
+            # Check if any timer is active (> 0)
+            find_timer = tracker_data.get("find_timer", 0)
+            light_timer = tracker_data.get("light_timer", 0)
+            alarm_timer = tracker_data.get("alarm_timer", 0)
+            
+            if any(timer and timer > 0 for timer in [find_timer, light_timer, alarm_timer]):
+                # Double check if mode is still within 10 minutes
+                import time
+                current_time = time.time() * 1000  # Convert to milliseconds
+                for timer in [find_timer, light_timer, alarm_timer]:
+                    if timer and timer > 0:
+                        elapsed = current_time - timer
+                        if 0 <= elapsed <= 600000:  # 10 minutes in milliseconds
+                            return True
+        return False
+
+    def _update_polling_interval(self, data):
+        """Update polling interval based on whether any modes are active."""
+        any_active = self._check_any_mode_active(data)
+        new_interval = self._fast_interval if any_active else self._default_interval
+        
+        if self.update_interval != new_interval:
+            old_interval = self.update_interval
+            self.update_interval = new_interval
+            self.logger.info(f"Updated polling interval from {old_interval.total_seconds()}s to {new_interval.total_seconds()}s (modes active: {any_active})")
+            
+            # Force the coordinator to respect the new interval immediately
+            if hasattr(self, '_unsub_refresh') and self._unsub_refresh:
+                self._unsub_refresh()
+                self._schedule_refresh()
+
+    async def async_set_fast_polling(self):
+        """Immediately switch to fast polling mode (called when a mode is started)."""
+        if self.update_interval != self._fast_interval:
+            self.logger.info(f"Immediately switching to fast polling (1 second)")
+            self.update_interval = self._fast_interval
+            
+            # Cancel current scheduled refresh and start fast polling
+            if hasattr(self, '_unsub_refresh') and self._unsub_refresh:
+                self._unsub_refresh()
+                self._schedule_refresh()
+
     async def _async_update_data(self):
         self.logger.info(f"_async_update_data called for trackers: {self.tracker_ids}")
         # Fetch latest location data for all trackers
