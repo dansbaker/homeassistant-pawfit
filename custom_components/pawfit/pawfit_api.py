@@ -449,14 +449,19 @@ class PawfitApiClient:
         start_timestamp = int(today_midnight.timestamp() * 1000)
         end_timestamp = int(tomorrow_midnight.timestamp() * 1000)
         
-        url = f"{BASE_URL}getactivitystatzip/1/1/{self._user_id}/{self._token}?end={end_timestamp}&start={start_timestamp}&tracker={tracker_id}"
+        url = f"{BASE_URL}getactivitystatzip/1/1"
         headers = {"User-Agent": USER_AGENT}
+        params = {
+            "end": end_timestamp,
+            "start": start_timestamp,
+            "tracker": tracker_id
+        }
         
-        self._logger.debug(f"Activity stats request: url={url}")
+        self._logger.debug(f"Activity stats request: url={url}, params={params}")
         self._logger.debug(f"Request parameters: start={start_timestamp} ({datetime.fromtimestamp(start_timestamp/1000)}), end={end_timestamp} ({datetime.fromtimestamp(end_timestamp/1000)}), tracker={tracker_id}")
         
         try:
-            resp = await self._request_with_reauth("GET", url, headers)
+            resp = await self._request_with_reauth("GET", url, headers, params=params)
             resp_text = await resp.text()
             
             self._logger.debug(f"Activity stats response: status={resp.status}, content_length={len(resp_text)}")
