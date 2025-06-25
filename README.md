@@ -1,6 +1,18 @@
 
-# Pawfit Home Assistant Integration
-
+# Pawfit Home Assistant I- 📍 **GPS Device Tracker** - Track your pets' real-time location on the Home Assistant map
+- 🔋 **Battery Monitoring** - Monitor battery level and charging status
+- 📶 **Signal Strength** - View GPS signal quality
+- 🎯 **Location Accuracy** - See GPS accuracy in meters
+- 🕐 **Last Seen** - Track when location was last updated
+- 🏃 **Fitness Tracking** - Monitor daily steps, calories burned, and active time
+- 📈 **Activity Stats** - View today's fitness data with real-time updates
+- 🔍 **Find Mode** - Activate GPS tracking for 10 minutes with button and status sensor
+- 💡 **Light Mode** - Turn on tracker LED light for 10 minutes with button and status sensor
+- 🚨 **Alarm Mode** - Activate tracker alarm for 10 minutes with button and status sensor
+- ⏱️ **Timer Sensors** - View countdown timers for active modes
+- ⚡ **Smart Polling** - Automatic 1-second updates when modes are active, 60-second otherwise
+- 🐕 **Multiple Pets** - Support for multiple trackers under one account
+- 🏠 **Home Assistant Integration** - Use in automations, scripts, and dashboards
 **⚠️ UNOFFICIAL INTEGRATION - NOT SUPPORTED BY PAWFIT ⚠️**
 
 A community-built Home Assistant integration for Pawfit pet trackers. Track multiple dogs/pets and integrate their location data into your smart home automations.
@@ -76,6 +88,9 @@ For each tracker, the integration provides:
 - Signal strength
 - Location accuracy (meters)
 - Last seen timestamp
+- Steps today (daily step count)
+- Calories today (daily calories burned)
+- Active time today (daily active minutes)
 - Find mode timer (countdown in seconds)
 - Light mode timer (countdown in seconds)
 - Alarm mode timer (countdown in seconds)
@@ -93,6 +108,26 @@ For each tracker, the integration provides:
 
 Each mode runs for exactly 10 minutes when activated. You can deactivate early by pressing the button again.
 
+## Fitness Tracking
+
+The integration provides comprehensive daily activity monitoring for your pets:
+
+- **Steps Today**: Total steps taken since midnight
+- **Calories Today**: Estimated calories burned based on activity
+- **Active Time Today**: Minutes of active movement throughout the day
+
+Fitness data is updated automatically and resets at midnight each day. The integration uses the Pawfit API's activity statistics to provide accurate, real-time fitness metrics.
+
+## Smart Polling
+
+The integration features intelligent update intervals to balance responsiveness with API efficiency:
+
+- **Normal Mode**: Updates every 60 seconds for location, battery, and fitness data
+- **Active Mode**: Switches to 1-second updates when any mode (Find, Light, or Alarm) is activated
+- **Automatic Switching**: Immediately returns to 60-second updates when all modes are deactivated
+
+This ensures you get real-time updates during active tracking while minimizing API calls during normal operation.
+
 ## Beta Status
 
 🚧 **This is BETA software with expanding features.**
@@ -100,7 +135,12 @@ Each mode runs for exactly 10 minutes when activated. You can deactivate early b
 Current limitations:
 - Limited tracker commands (Find, Light, and Alarm modes only)
 - Basic location and status information
-- No advanced Pawfit features (geofences, activity tracking, etc.)
+- No advanced Pawfit features (geofences, etc.)
+
+Recent additions:
+- ✅ Daily fitness tracking (steps, calories, active time)
+- ✅ Smart polling intervals for responsive mode tracking
+- ✅ Real-time activity statistics
 
 ## Support & Feature Requests
 
