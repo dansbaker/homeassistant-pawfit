@@ -1,28 +1,48 @@
-import aiohttp
-import logging
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.helpers.entity import Entity
-from homeassistant.components.device_tracker import TrackerEntity, SourceType
-from homeassistant.core import callback
-from datetime import datetime, timezone, timedelta
+"""Device tracker platform for Pawfit integration."""
+from __future__ import annotations
 
-from .pawfit_api import PawfitApiClient
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
+
+import aiohttp
+from homeassistant.components.device_tracker import SourceType, TrackerEntity
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+
 from .const import DOMAIN
+from .pawfit_api import PawfitApiClient
 
 # Define SOURCE_TYPE_GPS constant for device tracker
 SOURCE_TYPE_GPS = "gps"
 
 # Fallback: define DeviceTrackerEntity as base Entity if import fails
 try:
-    from homeassistant.components.device_tracker import TrackerEntity, SourceType
+    from homeassistant.components.device_tracker import SourceType, TrackerEntity
 except ImportError:
     class SourceType:
         GPS = "gps"
+    
     class TrackerEntity(Entity):
         pass
 
-class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
-    def __init__(self, hass, client, trackers):
+class PawfitDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Dict[str, Any]]]):
+    """Data update coordinator for Pawfit devices."""
+
+    def __init__(
+        self, 
+        hass: HomeAssistant, 
+        client: PawfitApiClient, 
+        trackers: List[Dict[str, Any]]
+    ) -> None:
+        """Initialize the coordinator.
+        
+        Args:
+            hass: Home Assistant instance
+            client: Pawfit API client
+            trackers: List of tracker dictionaries
+        """
         self.logger = logging.getLogger(__name__)
         super().__init__(
             hass,
@@ -37,8 +57,15 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         self._fast_interval = timedelta(seconds=1)
         self.logger.info(f"PawfitDataUpdateCoordinator initialized with trackers: {self.tracker_ids}")
 
-    def _check_any_mode_active(self, data):
-        """Check if any tracker has an active mode (find, light, or alarm)."""
+    def _check_any_mode_active(self, data: Optional[Dict[str, Dict[str, Any]]]) -> bool:
+        """Check if any tracker has an active mode (find, light, or alarm).
+        
+        Args:
+            data: Current tracker data
+            
+        Returns:
+            True if any tracker has an active mode
+        """
         if not data:
             self.logger.debug("No data available for mode check")
             return False
@@ -67,8 +94,12 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         self.logger.debug("No active modes detected")
         return False
 
-    def _update_polling_interval(self, data):
-        """Update polling interval based on whether any modes are active."""
+    def _update_polling_interval(self, data: Optional[Dict[str, Dict[str, Any]]]) -> None:
+        """Update polling interval based on whether any modes are active.
+        
+        Args:
+            data: Current tracker data
+        """
         any_active = self._check_any_mode_active(data)
         new_interval = self._fast_interval if any_active else self._default_interval
         
@@ -82,7 +113,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             if self._listeners:  # Only schedule if we have listeners
                 self._schedule_refresh()
 
-    async def async_set_fast_polling(self):
+    async def async_set_fast_polling(self) -> None:
         """Immediately switch to fast polling mode (called when a mode is started)."""
         if self.update_interval != self._fast_interval:
             self.logger.info(f"Immediately switching to fast polling (1 second)")
@@ -93,7 +124,12 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             if self._listeners:  # Only schedule if we have listeners
                 self._schedule_refresh()
 
-    async def _async_update_data(self):
+    async def _async_update_data(self) -> Dict[str, Dict[str, Any]]:
+        """Fetch data from the Pawfit API.
+        
+        Returns:
+            Dictionary mapping tracker IDs to their data
+        """
         self.logger.info(f"_async_update_data called for trackers: {self.tracker_ids}")
         # Fetch latest location data for all trackers
         location_data = await self.client.async_get_locations(self.tracker_ids)
@@ -169,8 +205,21 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             
         return location_data
 
+
 class PawfitDeviceTracker(TrackerEntity):
-    def __init__(self, tracker, coordinator):
+    """Pawfit device tracker entity."""
+
+    def __init__(
+        self, 
+        tracker: Dict[str, Any], 
+        coordinator: PawfitDataUpdateCoordinator
+    ) -> None:
+        """Initialize the device tracker.
+        
+        Args:
+            tracker: Tracker information dictionary
+            coordinator: Data update coordinator
+        """
         self._tracker = tracker
         self._coordinator = coordinator
         self._tracker_id = tracker["tracker_id"]
@@ -185,14 +234,14 @@ class PawfitDeviceTracker(TrackerEntity):
             "manufacturer": "PawFit",
             "translation_key": "pawfit_tracker",
         }
-        self._attr_latitude = None
-        self._attr_longitude = None
-        self._attr_location_accuracy = None
-        self._attr_battery_level = None
-        self._attr_charging = None
+        self._attr_latitude: Optional[float] = None
+        self._attr_longitude: Optional[float] = None
+        self._attr_location_accuracy: Optional[float] = None
+        self._attr_battery_level: Optional[int] = None
+        self._attr_charging: Optional[bool] = None
 
     @property
-    def battery_level(self):
+    def battery_level(self) -> Optional[int]:
         """Return battery level as a positive integer."""
         if self._attr_battery_level is not None:
             # Ensure we always return a positive value
@@ -200,19 +249,26 @@ class PawfitDeviceTracker(TrackerEntity):
         return self._attr_battery_level
 
     @property
-    def charging(self):
+    def charging(self) -> Optional[bool]:
+        """Return charging status."""
         return self._attr_charging
 
     @property
-    def source_type(self):
+    def source_type(self) -> str:
+        """Return the source type."""
         return self._attr_source_type
 
     @property
-    def available(self):
+    def available(self) -> bool:
         """Return if entity is available."""
-        return self._coordinator.last_update_success and self._attr_latitude is not None and self._attr_longitude is not None
+        return (
+            self._coordinator.last_update_success 
+            and self._attr_latitude is not None 
+            and self._attr_longitude is not None
+        )
 
-    def _update_attrs(self):
+    def _update_attrs(self) -> None:
+        """Update entity attributes from coordinator data."""
         data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
         self._attr_latitude = float(data.get("latitude")) if data.get("latitude") else None
         self._attr_longitude = float(data.get("longitude")) if data.get("longitude") else None
@@ -240,11 +296,12 @@ class PawfitDeviceTracker(TrackerEntity):
         if not (self._attr_latitude and self._attr_longitude) and data:
             logging.warning(f"Tracker {self._tracker_id}: No location data available")
 
-    async def async_update(self):
+    async def async_update(self) -> None:
+        """Update the entity."""
         await self._coordinator.async_request_refresh()
         self._update_attrs()
 
-    async def async_added_to_hass(self):
+    async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
         self._update_attrs()
@@ -260,8 +317,18 @@ class PawfitDeviceTracker(TrackerEntity):
         self.async_write_ha_state()
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up Pawfit device tracker entities from a config entry."""
+async def async_setup_entry(
+    hass: HomeAssistant, 
+    entry: Any, 
+    async_add_entities: Any
+) -> None:
+    """Set up Pawfit device tracker entities from a config entry.
+    
+    Args:
+        hass: Home Assistant instance
+        entry: Configuration entry
+        async_add_entities: Function to add entities
+    """
     # Get the coordinator from hass.data (created in __init__.py)
     coordinator = hass.data[DOMAIN][entry.entry_id]
     

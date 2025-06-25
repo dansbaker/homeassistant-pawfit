@@ -1,9 +1,13 @@
 """Sensor platform for Pawfit integration."""
+from __future__ import annotations
 
 import logging
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
-from homeassistant.core import callback
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
 
@@ -13,7 +17,27 @@ _LOGGER = logging.getLogger(__name__)
 class PawfitSensor(SensorEntity):
     """Base sensor class for Pawfit trackers."""
     
-    def __init__(self, tracker, coordinator, kind, name, unit=None, icon=None, device_class=None):
+    def __init__(
+        self, 
+        tracker: Dict[str, Any], 
+        coordinator: Any, 
+        kind: str, 
+        name: str, 
+        unit: Optional[str] = None, 
+        icon: Optional[str] = None, 
+        device_class: Optional[SensorDeviceClass] = None
+    ) -> None:
+        """Initialize the sensor.
+        
+        Args:
+            tracker: Tracker information dictionary
+            coordinator: Data update coordinator
+            kind: Type of sensor data
+            name: Human readable name
+            unit: Unit of measurement
+            icon: Icon to use
+            device_class: Device class for the sensor
+        """
         self._tracker = tracker
         self._coordinator = coordinator
         self._kind = kind  # e.g. 'battery', 'accuracy', 'signal', etc.
@@ -24,14 +48,14 @@ class PawfitSensor(SensorEntity):
         self._attr_icon = icon
         if device_class:
             self._attr_device_class = device_class
-        self._attr_device_info = {
+        self._attr_device_info: DeviceInfo = {
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
             "model": tracker.get("model", "Unknown")
         }
 
     @property
-    def native_value(self):
+    def native_value(self) -> Optional[float]:
         """Return the sensor value."""
         if self._coordinator.data is None:
             _LOGGER.debug(f"Sensor {self._attr_name} ({self._kind}): No coordinator data available")
@@ -49,11 +73,11 @@ class PawfitSensor(SensorEntity):
         return value
 
     @property
-    def available(self):
+    def available(self) -> bool:
         """Return if entity is available."""
         return self._coordinator.last_update_success
 
-    async def async_added_to_hass(self):
+    async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
         # Register for coordinator updates
@@ -70,7 +94,23 @@ class PawfitSensor(SensorEntity):
 class PawfitTimestampSensor(SensorEntity):
     """Sensor for timestamp-based data like Last Time Seen."""
     
-    def __init__(self, tracker, coordinator, kind, name, icon=None):
+    def __init__(
+        self, 
+        tracker: Dict[str, Any], 
+        coordinator: Any, 
+        kind: str, 
+        name: str, 
+        icon: Optional[str] = None
+    ) -> None:
+        """Initialize the timestamp sensor.
+        
+        Args:
+            tracker: Tracker information dictionary
+            coordinator: Data update coordinator
+            kind: Type of timestamp data
+            name: Human readable name
+            icon: Icon to use
+        """
         self._tracker = tracker
         self._coordinator = coordinator
         self._kind = kind
@@ -79,14 +119,14 @@ class PawfitTimestampSensor(SensorEntity):
         self._attr_unique_id = f"{tracker['petId']}_{kind}"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_icon = icon or "mdi:clock-outline"
-        self._attr_device_info = {
+        self._attr_device_info: DeviceInfo = {
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
             "model": tracker.get("model", "Unknown"),
         }
 
     @property
-    def native_value(self):
+    def native_value(self) -> Optional[datetime]:
         """Return the timestamp as a datetime object."""
         if self._coordinator.data is None:
             return None
@@ -105,20 +145,20 @@ class PawfitTimestampSensor(SensorEntity):
                     dt = datetime.fromtimestamp(utc_timestamp, timezone.utc)
                     return dt
                 except (ValueError, TypeError) as e:
-                    logging.error(f"Tracker {self._tracker_id} failed to convert timestamp {utc_timestamp}: {e}")
+                    _LOGGER.error(f"Tracker {self._tracker_id} failed to convert timestamp {utc_timestamp}: {e}")
                     return None
             else:
-                logging.error(f"Tracker {self._tracker_id}: No utcDateTime found in location data")
+                _LOGGER.error(f"Tracker {self._tracker_id}: No utcDateTime found in location data")
         
-        logging.error(f"Tracker {self._tracker_id}: Returning None for timestamp sensor")
+        _LOGGER.error(f"Tracker {self._tracker_id}: Returning None for timestamp sensor")
         return None
 
     @property
-    def available(self):
+    def available(self) -> bool:
         """Return if entity is available."""
         return self._coordinator.last_update_success
 
-    async def async_added_to_hass(self):
+    async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
         # Register for coordinator updates
@@ -135,7 +175,23 @@ class PawfitTimestampSensor(SensorEntity):
 class PawfitTimerSensor(SensorEntity):
     """Sensor for countdown timers (Find Mode and Light Mode)."""
     
-    def __init__(self, tracker, coordinator, timer_type, name, icon=None):
+    def __init__(
+        self, 
+        tracker: Dict[str, Any], 
+        coordinator: Any, 
+        timer_type: str, 
+        name: str, 
+        icon: Optional[str] = None
+    ) -> None:
+        """Initialize the timer sensor.
+        
+        Args:
+            tracker: Tracker information dictionary
+            coordinator: Data update coordinator
+            timer_type: Type of timer ('timer' or 'light_timer')
+            name: Human readable name
+            icon: Icon to use
+        """
         self._tracker = tracker
         self._coordinator = coordinator
         self._timer_type = timer_type  # 'timer' or 'light_timer'
@@ -144,7 +200,7 @@ class PawfitTimerSensor(SensorEntity):
         self._attr_unique_id = f"{tracker['petId']}_{timer_type}_countdown"
         self._attr_native_unit_of_measurement = "s"  # seconds
         self._attr_icon = icon or "mdi:timer"
-        self._attr_device_info = {
+        self._attr_device_info: DeviceInfo = {
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
             "model": tracker.get("model", "Unknown"),
@@ -153,7 +209,7 @@ class PawfitTimerSensor(SensorEntity):
         }
 
     @property
-    def native_value(self):
+    def native_value(self) -> int:
         """Return the remaining time in seconds."""
         if self._coordinator.data is None:
             return 0
@@ -183,7 +239,7 @@ class PawfitTimerSensor(SensorEntity):
         return 0
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> Dict[str, Any]:
         """Return extra state attributes."""
         if self._coordinator.data is None:
             return {}
@@ -191,7 +247,7 @@ class PawfitTimerSensor(SensorEntity):
         data = self._coordinator.data.get(str(self._tracker_id), {})
         timer_start = data.get(self._timer_type, 0)
         
-        attributes = {}
+        attributes: Dict[str, Any] = {}
         if timer_start and timer_start > 0:
             # Add formatted time remaining
             remaining_seconds = self.native_value
@@ -208,11 +264,11 @@ class PawfitTimerSensor(SensorEntity):
         return attributes
 
     @property
-    def available(self):
+    def available(self) -> bool:
         """Return if entity is available."""
         return self._coordinator.last_update_success
 
-    async def async_added_to_hass(self):
+    async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
         self.async_on_remove(
@@ -225,12 +281,22 @@ class PawfitTimerSensor(SensorEntity):
         self.async_write_ha_state()
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up Pawfit sensor entities from a config entry."""
+async def async_setup_entry(
+    hass: HomeAssistant, 
+    entry: Any, 
+    async_add_entities: Any
+) -> None:
+    """Set up Pawfit sensor entities from a config entry.
+    
+    Args:
+        hass: Home Assistant instance
+        entry: Configuration entry
+        async_add_entities: Function to add entities
+    """
     # Get the coordinator from hass.data (created in __init__.py)
     coordinator = hass.data[DOMAIN][entry.entry_id]
     
-    entities = []
+    entities: List[SensorEntity] = []
     for tracker in coordinator.trackers:
         entities.append(PawfitSensor(tracker, coordinator, "battery", "Battery Level", unit="%", icon="mdi:battery-medium", device_class=SensorDeviceClass.BATTERY))
         entities.append(PawfitSensor(tracker, coordinator, "accuracy", "Location Accuracy", unit="m", icon="mdi:map-marker-radius"))
