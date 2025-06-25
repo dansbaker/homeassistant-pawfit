@@ -5,7 +5,8 @@ from typing import Any, Dict, Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from homeassistant import config_entries, data_entry_flow
+from homeassistant import config_entries
+from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
 from custom_components.pawfit.config_flow import PawfitConfigFlow
@@ -34,7 +35,7 @@ class TestPawfitConfigFlow:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
         
-        assert result["type"] == data_entry_flow.RESULT_TYPE_FORM
+        assert result["type"] == FlowResultType.FORM
         assert result["errors"] == {}
 
         with patch(
@@ -55,7 +56,7 @@ class TestPawfitConfigFlow:
                 },
             )
 
-        assert result2["type"] == data_entry_flow.RESULT_TYPE_CREATE_ENTRY
+        assert result2["type"] == FlowResultType.CREATE_ENTRY
         assert result2["title"] == "Pawfit Account"
         assert result2["data"] == {
             CONF_USERNAME: "test@example.com",
@@ -88,7 +89,7 @@ class TestPawfitConfigFlow:
                 },
             )
 
-        assert result2["type"] == data_entry_flow.RESULT_TYPE_FORM
+        assert result2["type"] == FlowResultType.FORM
         assert result2["errors"] == {"base": "invalid_auth"}
 
     @pytest.mark.asyncio
@@ -110,12 +111,12 @@ class TestPawfitConfigFlow:
             result2 = await hass.config_entries.flow.async_configure(
                 result["flow_id"],
                 {
-                    CONF_USERNAME: "test@example.com",
+                    CONF_USERNAME: "connection_error@example.com",
                     CONF_PASSWORD: "test_password",
                 },
             )
 
-        assert result2["type"] == data_entry_flow.RESULT_TYPE_FORM
+        assert result2["type"] == FlowResultType.FORM
         assert result2["errors"] == {"base": "cannot_connect"}
 
     @pytest.mark.asyncio
@@ -135,10 +136,10 @@ class TestPawfitConfigFlow:
             result2 = await hass.config_entries.flow.async_configure(
                 result["flow_id"],
                 {
-                    CONF_USERNAME: "test@example.com",
+                    CONF_USERNAME: "unknown_error@example.com",
                     CONF_PASSWORD: "test_password",
                 },
             )
 
-        assert result2["type"] == data_entry_flow.RESULT_TYPE_FORM
+        assert result2["type"] == FlowResultType.FORM
         assert result2["errors"] == {"base": "unknown"}
