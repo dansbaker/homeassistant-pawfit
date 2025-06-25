@@ -453,18 +453,34 @@ class PawfitApiClient:
         headers = {"User-Agent": USER_AGENT}
         
         self._logger.debug(f"Activity stats request: url={url}")
+        self._logger.debug(f"Request parameters: start={start_timestamp} ({datetime.fromtimestamp(start_timestamp/1000)}), end={end_timestamp} ({datetime.fromtimestamp(end_timestamp/1000)}), tracker={tracker_id}")
         
         try:
             resp = await self._request_with_reauth("GET", url, headers)
             resp_text = await resp.text()
             
+            self._logger.debug(f"Activity stats response: status={resp.status}, content_length={len(resp_text)}")
+            
             if resp.status == 200:
-                # Decode the compressed response
-                decoded = zlib.decompress(base64.urlsafe_b64decode(resp_text + '=='))
-                raw_data = json.loads(decoded)
+                self._logger.debug(f"Raw response text (first 200 chars): {resp_text[:200]}...")
                 
-                # Compile daily stats
-                return self._compile_daily_activity_stats(raw_data)
+                # Decode the compressed response
+                try:
+                    decoded = zlib.decompress(base64.urlsafe_b64decode(resp_text + '=='))
+                    self._logger.debug(f"Decompressed data length: {len(decoded)} bytes")
+                    
+                    raw_data = json.loads(decoded)
+                    self._logger.debug(f"Parsed JSON keys: {list(raw_data.keys()) if isinstance(raw_data, dict) else 'Not a dict'}")
+                    
+                    # Compile daily stats
+                    stats = self._compile_daily_activity_stats(raw_data)
+                    self._logger.info(f"Activity stats for tracker {tracker_id}: {stats}")
+                    return stats
+                    
+                except Exception as decode_error:
+                    self._logger.error(f"Failed to decode activity stats response: {decode_error}")
+                    self._logger.debug(f"Raw response for debugging: {resp_text}")
+                    return {"total_steps": 0, "total_calories": 0.0, "total_active_hours": 0.0}
             else:
                 self._logger.error(f"Failed to fetch activity stats: status={resp.status}, body={resp_text}")
                 return {"total_steps": 0, "total_calories": 0.0, "total_active_hours": 0.0}
@@ -475,28 +491,40 @@ class PawfitApiClient:
     
     def _compile_daily_activity_stats(self, activity_data):
         """Compile hourly stats into daily summaries."""
+        self._logger.debug(f"Compiling activity data: {activity_data}")
+        
         activities = activity_data.get('data', {}).get('activities', [])
+        self._logger.debug(f"Found {len(activities)} daily activity entries")
         
         # Initialize totals
         total_steps = 0
         total_calories = 0.0
         total_active_hours = 0.0
         
-        for day_activity in activities:
+        for i, day_activity in enumerate(activities):
+            self._logger.debug(f"Processing day {i}: {day_activity}")
             hourly_stats = day_activity.get('hourlyStats', [])
+            self._logger.debug(f"Day {i} has {len(hourly_stats)} hourly stats")
             
-            for hour_stat in hourly_stats:
-                # Sum up the totals
-                total_calories += hour_stat.get('calorie', 0.0)
-                total_active_hours += hour_stat.get('active', 0.0)
-                
-                # Steps = pace value
+            for j, hour_stat in enumerate(hourly_stats):
+                # Log each hour's data
+                calorie = hour_stat.get('calorie', 0.0)
+                active = hour_stat.get('active', 0.0)
                 pace = hour_stat.get('pace', 0)
+                
+                self._logger.debug(f"Hour {j}: calorie={calorie}, active={active}, pace={pace}")
+                
+                # Sum up the totals
+                total_calories += calorie
+                total_active_hours += active
                 total_steps += pace
         
-        return {
+        final_stats = {
             "total_steps": total_steps,
             "total_calories": round(total_calories, 2),
             "total_active_hours": round(total_active_hours, 2)
         }
+        
+        self._logger.debug(f"Final compiled stats: {final_stats}")
+        return final_stats
 

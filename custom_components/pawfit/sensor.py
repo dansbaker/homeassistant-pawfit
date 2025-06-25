@@ -34,9 +34,19 @@ class PawfitSensor(SensorEntity):
     def native_value(self):
         """Return the sensor value."""
         if self._coordinator.data is None:
+            _LOGGER.debug(f"Sensor {self._attr_name} ({self._kind}): No coordinator data available")
             return None
+        
         loc = self._coordinator.data.get(str(self._tracker_id), {})
-        return loc.get(self._kind)
+        value = loc.get(self._kind)
+        
+        # Add debug logging specifically for activity sensors
+        if self._kind in ["steps_today", "calories_today", "active_time_today"]:
+            _LOGGER.debug(f"Activity sensor {self._attr_name} ({self._kind}): tracker_data_keys={list(loc.keys())}, value={value}")
+            if value == 0 or value is None:
+                _LOGGER.warning(f"Activity sensor {self._attr_name} ({self._kind}) is zero or None. Full tracker data: {loc}")
+        
+        return value
 
     @property
     def available(self):

@@ -146,17 +146,23 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         self._update_polling_interval(location_data)
         
         # Fetch activity stats for each tracker
+        self.logger.debug(f"Fetching activity stats for {len(self.tracker_ids)} trackers: {self.tracker_ids}")
         try:
             for tracker_id in self.tracker_ids:
+                self.logger.debug(f"Requesting activity stats for tracker {tracker_id}")
                 activity_stats = await self.client.async_get_activity_stats(str(tracker_id))
+                self.logger.debug(f"Received activity stats for tracker {tracker_id}: {activity_stats}")
+                
                 if str(tracker_id) in location_data:
+                    before_update = location_data[str(tracker_id)].copy()
                     location_data[str(tracker_id)].update({
                         "steps_today": activity_stats.get("total_steps", 0),
                         "calories_today": activity_stats.get("total_calories", 0.0),
                         "active_time_today": activity_stats.get("total_active_hours", 0.0)
                     })
+                    self.logger.debug(f"Updated tracker {tracker_id} data. Before: {before_update}, After: {location_data[str(tracker_id)]}")
                 else:
-                    self.logger.warning(f"Tracker {tracker_id} not found in location_data for activity stats update")
+                    self.logger.warning(f"Tracker {tracker_id} not found in location_data for activity stats update. Available keys: {list(location_data.keys())}")
         except Exception as e:
             self.logger.error(f"Failed to fetch activity stats: {e}", exc_info=True)
             # Continue without activity stats if this fails
