@@ -449,7 +449,7 @@ class PawfitApiClient:
         start_timestamp = int(today_midnight.timestamp() * 1000)
         end_timestamp = int(tomorrow_midnight.timestamp() * 1000)
         
-        url = f"{BASE_URL}getactivitystatzip/{self._user_id}/{self._token}?end={end_timestamp}&start={start_timestamp}&tracker={tracker_id}"
+        url = f"{BASE_URL}getactivitystatzip/1/1/{self._user_id}/{self._token}?end={end_timestamp}&start={start_timestamp}&tracker={tracker_id}"
         headers = {"User-Agent": USER_AGENT}
         
         self._logger.debug(f"Activity stats request: url={url}")
