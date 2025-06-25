@@ -40,7 +40,11 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
     def _check_any_mode_active(self, data):
         """Check if any tracker has an active mode (find, light, or alarm)."""
         if not data:
+            self.logger.debug("No data available for mode check")
             return False
+        
+        import time
+        current_time = time.time() * 1000  # Convert to milliseconds
         
         for tracker_id_str, tracker_data in data.items():
             # Check if any timer is active (> 0)
@@ -48,15 +52,19 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             light_timer = tracker_data.get("light_timer", 0)
             alarm_timer = tracker_data.get("alarm_timer", 0)
             
+            self.logger.debug(f"Tracker {tracker_id_str}: find_timer={find_timer}, light_timer={light_timer}, alarm_timer={alarm_timer}, current_time={current_time}")
+            
             if any(timer and timer > 0 for timer in [find_timer, light_timer, alarm_timer]):
                 # Double check if mode is still within 10 minutes
-                import time
-                current_time = time.time() * 1000  # Convert to milliseconds
-                for timer in [find_timer, light_timer, alarm_timer]:
+                for timer_name, timer in [("find", find_timer), ("light", light_timer), ("alarm", alarm_timer)]:
                     if timer and timer > 0:
                         elapsed = current_time - timer
+                        self.logger.debug(f"Tracker {tracker_id_str} {timer_name} mode: timer={timer}, elapsed={elapsed}ms ({elapsed/1000:.1f}s)")
                         if 0 <= elapsed <= 600000:  # 10 minutes in milliseconds
+                            self.logger.info(f"Tracker {tracker_id_str} has active {timer_name} mode (elapsed: {elapsed/1000:.1f}s)")
                             return True
+        
+        self.logger.debug("No active modes detected")
         return False
 
     def _update_polling_interval(self, data):
@@ -69,9 +77,9 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             self.update_interval = new_interval
             self.logger.info(f"Updated polling interval from {old_interval.total_seconds()}s to {new_interval.total_seconds()}s (modes active: {any_active})")
             
-            # Force the coordinator to respect the new interval immediately
-            if hasattr(self, '_unsub_refresh') and self._unsub_refresh:
-                self._unsub_refresh()
+            # Force immediate rescheduling by canceling current refresh and rescheduling
+            self._async_unsub_refresh()
+            if self._listeners:  # Only schedule if we have listeners
                 self._schedule_refresh()
 
     async def async_set_fast_polling(self):
@@ -80,9 +88,9 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             self.logger.info(f"Immediately switching to fast polling (1 second)")
             self.update_interval = self._fast_interval
             
-            # Cancel current scheduled refresh and start fast polling
-            if hasattr(self, '_unsub_refresh') and self._unsub_refresh:
-                self._unsub_refresh()
+            # Cancel current scheduled refresh and start fast polling immediately
+            self._async_unsub_refresh()
+            if self._listeners:  # Only schedule if we have listeners
                 self._schedule_refresh()
 
     async def _async_update_data(self):
