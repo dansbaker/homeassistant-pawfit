@@ -229,5 +229,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.append(PawfitTimerSensor(tracker, coordinator, "find_timer", "Find Mode Timer", icon="mdi:crosshairs-gps"))
         entities.append(PawfitTimerSensor(tracker, coordinator, "light_timer", "Light Mode Timer", icon="mdi:lightbulb-on"))
         entities.append(PawfitTimerSensor(tracker, coordinator, "alarm_timer", "Alarm Mode Timer", icon="mdi:alarm-light"))
+        
+        # Add daily activity sensors
+        entities.append(PawfitSensor(tracker, coordinator, "steps_today", "Steps Today", unit="steps", icon="mdi:walk"))
+        entities.append(PawfitSensor(tracker, coordinator, "calories_today", "Calories Today", unit="cal", icon="mdi:fire"))
+        entities.append(PawfitSensor(tracker, coordinator, "active_time_today", "Active Time Today", unit="h", icon="mdi:clock-time-eight"))
     
     async_add_entities(entities)

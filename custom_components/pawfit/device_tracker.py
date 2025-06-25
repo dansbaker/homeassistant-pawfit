@@ -28,11 +28,13 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             hass,
             logger=self.logger,
             name=DOMAIN,
-            update_interval=timedelta(seconds=60),  # Poll every 60 seconds
+            update_interval=timedelta(seconds=60),  # Default: Poll every 60 seconds
         )
         self.client = client
         self.trackers = trackers
         self.tracker_ids = [t["tracker_id"] for t in trackers]
+        self._default_interval = timedelta(seconds=60)
+        self._fast_interval = timedelta(seconds=1)
         self.logger.info(f"PawfitDataUpdateCoordinator initialized with trackers: {self.tracker_ids}")
 
     def _check_any_mode_active(self, data):
@@ -131,6 +133,25 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as e:
             self.logger.error(f"Failed to fetch detailed status: {e}", exc_info=True)
             # Continue with just location data if detailed status fails
+            
+        # Update polling interval based on active modes
+        self._update_polling_interval(location_data)
+        
+        # Fetch activity stats for each tracker
+        try:
+            for tracker_id in self.tracker_ids:
+                activity_stats = await self.client.async_get_activity_stats(str(tracker_id))
+                if str(tracker_id) in location_data:
+                    location_data[str(tracker_id)].update({
+                        "steps_today": activity_stats.get("total_steps", 0),
+                        "calories_today": activity_stats.get("total_calories", 0.0),
+                        "active_time_today": activity_stats.get("total_active_hours", 0.0)
+                    })
+                else:
+                    self.logger.warning(f"Tracker {tracker_id} not found in location_data for activity stats update")
+        except Exception as e:
+            self.logger.error(f"Failed to fetch activity stats: {e}", exc_info=True)
+            # Continue without activity stats if this fails
             
         return location_data
 

@@ -427,3 +427,76 @@ class PawfitApiClient:
             self._logger.error(f"Failed to stop alarm mode: status={resp.status}, body={resp_text}")
             return False
 
+    async def async_get_activity_stats(self, tracker_id: str) -> dict:
+        """Get today's activity stats for a specific tracker."""
+        import base64
+        import zlib
+        import json
+        from datetime import datetime
+        
+        self._logger.debug(f"Fetching activity stats for tracker {tracker_id}")
+        
+        # Ensure we are authenticated
+        if not hasattr(self, "_user_id") or not hasattr(self, "_token") or self._user_id is None or self._token is None:
+            await self.async_login()
+        
+        # Calculate today's date range (midnight to midnight)
+        now = datetime.now()
+        today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow_midnight = today_midnight.replace(hour=23, minute=59, second=59, microsecond=999000)
+        
+        # Convert to millisecond timestamps
+        start_timestamp = int(today_midnight.timestamp() * 1000)
+        end_timestamp = int(tomorrow_midnight.timestamp() * 1000)
+        
+        url = f"{BASE_URL}getactivitystatzip/{self._user_id}/{self._token}?end={end_timestamp}&start={start_timestamp}&tracker={tracker_id}"
+        headers = {"User-Agent": USER_AGENT}
+        
+        self._logger.debug(f"Activity stats request: url={url}")
+        
+        try:
+            resp = await self._request_with_reauth("GET", url, headers)
+            resp_text = await resp.text()
+            
+            if resp.status == 200:
+                # Decode the compressed response
+                decoded = zlib.decompress(base64.urlsafe_b64decode(resp_text + '=='))
+                raw_data = json.loads(decoded)
+                
+                # Compile daily stats
+                return self._compile_daily_activity_stats(raw_data)
+            else:
+                self._logger.error(f"Failed to fetch activity stats: status={resp.status}, body={resp_text}")
+                return {"total_steps": 0, "total_calories": 0.0, "total_active_hours": 0.0}
+                
+        except Exception as e:
+            self._logger.error(f"Error fetching activity stats for tracker {tracker_id}: {e}")
+            return {"total_steps": 0, "total_calories": 0.0, "total_active_hours": 0.0}
+    
+    def _compile_daily_activity_stats(self, activity_data):
+        """Compile hourly stats into daily summaries."""
+        activities = activity_data.get('data', {}).get('activities', [])
+        
+        # Initialize totals
+        total_steps = 0
+        total_calories = 0.0
+        total_active_hours = 0.0
+        
+        for day_activity in activities:
+            hourly_stats = day_activity.get('hourlyStats', [])
+            
+            for hour_stat in hourly_stats:
+                # Sum up the totals
+                total_calories += hour_stat.get('calorie', 0.0)
+                total_active_hours += hour_stat.get('active', 0.0)
+                
+                # Steps = pace value
+                pace = hour_stat.get('pace', 0)
+                total_steps += pace
+        
+        return {
+            "total_steps": total_steps,
+            "total_calories": round(total_calories, 2),
+            "total_active_hours": round(total_active_hours, 2)
+        }
+
