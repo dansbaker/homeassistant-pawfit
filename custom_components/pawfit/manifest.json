@@ -1,7 +1,7 @@
 {
   "domain": "pawfit",
   "name": "Pawfit Pet Tracker",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "codeowners": ["@danbaker"],
   "documentation": "https://github.com/dansbaker/homeassistant-pawfit#readme",
   "integration_type": "hub",
