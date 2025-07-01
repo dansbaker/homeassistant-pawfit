@@ -2,7 +2,7 @@ name: Create Release
 
 permissions:
   contents: write
-  
+
 on:
   push:
     tags:
@@ -21,7 +21,13 @@ jobs:
 
       - name: Create HACS zip
         run: |
-          zip -r pawfit.zip custom_components/ hacs.json -x "custom_components/pawfit/__pycache__/*" "*/__pycache__/*"
+          # Create zip with the correct structure for HACS
+          # The zip should contain the integration files directly, not nested in custom_components/
+          cd custom_components/pawfit
+          zip -r ../../pawfit.zip . -x "__pycache__/*" "*/__pycache__/*"
+          cd ../../
+          # Add hacs.json to the zip
+          zip pawfit.zip hacs.json
           
       - name: Create Release
         uses: softprops/action-gh-release@v1
