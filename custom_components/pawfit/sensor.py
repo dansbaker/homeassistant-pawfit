@@ -40,6 +40,11 @@ class PawfitSensor(SensorEntity):
         loc = self._coordinator.data.get(str(self._tracker_id), {})
         value = loc.get(self._kind)
         
+        # Special handling for battery level
+        if self._kind == "battery" and value is not None:
+            # If battery is negative, it means charging - return absolute value
+            return abs(int(value))
+        
         # Add debug logging specifically for activity sensors
         if self._kind in ["steps_today", "calories_today", "active_time_today"]:
             _LOGGER.debug(f"Activity sensor {self._attr_name} ({self._kind}): tracker_data_keys={list(loc.keys())}, value={value}")
