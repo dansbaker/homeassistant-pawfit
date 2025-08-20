@@ -24,13 +24,8 @@ class PawfitApiClient:
                 self._logger.error(f"Pawfit login failed: status={resp.status}")
                 raise Exception("Incorrect username or password for Pawfit API")
             try:
-                # Try to parse as JSON, fallback to manual loads if mimetype is wrong
-                try:
-                    data = await resp.json()
-                except Exception as e:
-                    self._logger.warning(f"Falling back to manual JSON decode due to: {e}")
-                    import json
-                    data = json.loads(resp_text)
+                import json
+                data = json.loads(resp_text)
             except Exception as e:
                 self._logger.error(f"Failed to parse JSON from Pawfit login response: {e}")
                 raise Exception("Invalid response from Pawfit API")
@@ -83,12 +78,8 @@ class PawfitApiClient:
         resp = await self._request_with_reauth("GET", url, headers)
         resp_text = await resp.text()
         try:
-            try:
-                data = await resp.json()
-            except Exception as e:
-                self._logger.warning(f"Falling back to manual JSON decode for trackers due to: {e}")
-                import json
-                data = json.loads(resp_text)
+            import json
+            data = json.loads(resp_text)
         except Exception as e:
             self._logger.error(f"Failed to parse JSON from Pawfit trackers response: {e}, body={resp_text}")
             raise Exception("Invalid response from Pawfit API (trackers)")
@@ -221,13 +212,9 @@ class PawfitApiClient:
         resp_text = await resp.text()
         self._logger.debug(f"Raw detailed status response: {resp_text}")
         
-        try:
-            try:
-                data = await resp.json()
-            except Exception as e:
-                self._logger.warning(f"Falling back to manual JSON decode for detailed status due to: {e}")
-                import json
-                data = json.loads(resp_text)
+        try:    
+            import json
+            data = json.loads(resp_text)
         except Exception as e:
             self._logger.error(f"Failed to parse JSON from detailed status response: {e}, body={resp_text}")
             raise Exception("Invalid response from Pawfit API (detailed status)")
