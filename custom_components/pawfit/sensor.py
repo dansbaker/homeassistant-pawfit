@@ -48,8 +48,6 @@ class PawfitSensor(SensorEntity):
         # Add debug logging specifically for activity sensors
         if self._kind in ["steps_today", "calories_today", "active_time_today"]:
             _LOGGER.debug(f"Activity sensor {self._attr_name} ({self._kind}): tracker_data_keys={list(loc.keys())}, value={value}")
-            if value == 0 or value is None:
-                _LOGGER.warning(f"Activity sensor {self._attr_name} ({self._kind}) is zero or None. Full tracker data: {loc}")
         
         return value
 
