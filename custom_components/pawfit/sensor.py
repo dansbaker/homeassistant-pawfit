@@ -108,12 +108,12 @@ class PawfitTimestampSensor(SensorEntity):
                     dt = datetime.fromtimestamp(utc_timestamp, timezone.utc)
                     return dt
                 except (ValueError, TypeError) as e:
-                    logging.error(f"Tracker {self._tracker_id} failed to convert timestamp {utc_timestamp}: {e}")
+                    _LOGGER.debug(f"Tracker {self._tracker_id} failed to convert timestamp {utc_timestamp}: {e}")
                     return None
             else:
-                logging.error(f"Tracker {self._tracker_id}: No utcDateTime found in location data")
+                _LOGGER.debug(f"Tracker {self._tracker_id}: No utcDateTime found in location data")
         
-        logging.error(f"Tracker {self._tracker_id}: Returning None for timestamp sensor")
+        _LOGGER.debug(f"Tracker {self._tracker_id}: Returning None for timestamp sensor")
         return None
 
     @property

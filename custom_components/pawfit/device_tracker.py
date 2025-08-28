@@ -61,7 +61,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
                         elapsed = current_time - timer
                         self.logger.debug(f"Tracker {tracker_id_str} {timer_name} mode: timer={timer}, elapsed={elapsed}ms ({elapsed/1000:.1f}s)")
                         if 0 <= elapsed <= 600000:  # 10 minutes in milliseconds
-                            self.logger.info(f"Tracker {tracker_id_str} has active {timer_name} mode (elapsed: {elapsed/1000:.1f}s)")
+                            self.logger.debug(f"Tracker {tracker_id_str} has active {timer_name} mode (elapsed: {elapsed/1000:.1f}s)")
                             return True
         
         self.logger.debug("No active modes detected")
@@ -75,7 +75,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         if self.update_interval != new_interval:
             old_interval = self.update_interval
             self.update_interval = new_interval
-            self.logger.info(f"Updated polling interval from {old_interval.total_seconds()}s to {new_interval.total_seconds()}s (modes active: {any_active})")
+            self.logger.debug(f"Updated polling interval from {old_interval.total_seconds()}s to {new_interval.total_seconds()}s (modes active: {any_active})")
             
             # Force immediate rescheduling by canceling current refresh and rescheduling
             self._async_unsub_refresh()
@@ -85,7 +85,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_set_fast_polling(self):
         """Immediately switch to fast polling mode (called when a mode is started)."""
         if self.update_interval != self._fast_interval:
-            self.logger.info(f"Immediately switching to fast polling (1 second)")
+            self.logger.debug(f"Immediately switching to fast polling (1 second)")
             self.update_interval = self._fast_interval
             
             # Cancel current scheduled refresh and start fast polling immediately
@@ -94,7 +94,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
                 self._schedule_refresh()
 
     async def _async_update_data(self):
-        self.logger.info(f"_async_update_data called for trackers: {self.tracker_ids}")
+        self.logger.debug(f"_async_update_data called for trackers: {self.tracker_ids}")
         # Fetch latest location data for all trackers
         location_data = await self.client.async_get_locations(self.tracker_ids)
         
