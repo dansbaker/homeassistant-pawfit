@@ -53,19 +53,28 @@ class PawfitApiClient:
         return f"{url}/{user_id}/{token}"
 
     async def _request_with_reauth(self, method, url, headers, append_auth=True, **kwargs):
+        # Store the original URL before any auth modifications
+        original_url = url
+        
         if append_auth:
             url = self._append_auth_to_url(url)
+        
         resp = await self._session.request(method, url, headers=headers, **kwargs)
-        resp_text = await resp.text()
+        
         if resp.status == 403:
             self._logger.warning("Pawfit API 403 received, attempting re-authentication.")
             login_data = await self.async_login()
             self._user_id = login_data["userId"]
             self._token = login_data["sessionId"]
+            
+            # Use the original URL and rebuild with new auth
             if append_auth:
-                url = self._append_auth_to_url(url.split("/", 1)[0])
+                url = self._append_auth_to_url(original_url)
+            else:
+                url = original_url
+                
             resp = await self._session.request(method, url, headers=headers, **kwargs)
-            resp_text = await resp.text()
+        
         return resp
 
     async def async_get_trackers(self) -> list:
