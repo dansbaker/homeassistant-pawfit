@@ -1,7 +1,46 @@
 """Async client for Pawfit API authentication."""
 import aiohttp
+import hashlib
 import logging
+import time
 from .const import BASE_URL, USER_AGENT
+
+# Secret key extracted from Pawfit Android APK v3.3.0
+# Located in com.latsen.pawfit.common.base.Const.g()
+PAWFIT_SECRET = "ldjou32rweo$#runvjvn@!pzm"
+
+
+def _sha256_hex(data: str) -> str:
+    """Calculate SHA-256 hash and return as lowercase hex string."""
+    return hashlib.sha256(data.encode('utf-8')).hexdigest()
+
+
+def calculate_login_sign(account: str, password: str, timestamp: int) -> str:
+    """
+    Calculate the 'sign' parameter for login requests.
+    
+    Formula: SHA256(timestamp + account + password + SECRET)
+    """
+    data = f"{timestamp}{account}{password}{PAWFIT_SECRET}"
+    return _sha256_hex(data)
+
+
+def calculate_api_sign(
+    user_id: str,
+    session_id: str,
+    identity: str = "",
+    target: str = "",
+    tracker: str = "",
+    pet: str = ""
+) -> str:
+    """
+    Calculate the 'sign' parameter for authenticated API requests.
+    
+    Formula: SHA256(sessionId + userId + identity + target + tracker + pet + SECRET)
+    """
+    data = f"{session_id}{user_id}{identity}{target}{tracker}{pet}{PAWFIT_SECRET}"
+    return _sha256_hex(data)
+
 
 class PawfitApiClient:
     def __init__(self, username: str, password: str, session: aiohttp.ClientSession):
@@ -13,33 +52,62 @@ class PawfitApiClient:
 
     async def async_login(self) -> dict:
         """Authenticate with Pawfit and return userId and sessionId. Raise on failure."""
-        # Build login URL with username and password as query parameters
-        url = BASE_URL + "login/1/1"
-        params = {"user": self._username, "pwd": self._password}
-        headers = {"User-Agent": USER_AGENT}
+        import json
         
-        async with self._session.get(url, params=params, headers=headers) as resp:
+        # Build login URL - POST to login endpoint
+        url = BASE_URL + "login/1/1"
+        
+        # Calculate timestamp and signature
+        timestamp = int(time.time() * 1000)  # milliseconds
+        sign = calculate_login_sign(self._username, self._password, timestamp)
+        
+        # Form data for POST request
+        form_data = {
+            "user": self._username,
+            "pwd": self._password,
+            "t": str(timestamp),
+            "sign": sign
+        }
+        
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/x-www-form-urlencoded; charset=utf-8"
+        }
+        
+        self._logger.debug(f"Pawfit login attempt: url={url}, user={self._username}")
+        
+        async with self._session.post(url, data=form_data, headers=headers) as resp:
             resp_text = await resp.text()
+            self._logger.debug(f"Pawfit login response: status={resp.status}, body={resp_text[:200]}")
+            
             if resp.status != 200:
-                self._logger.error(f"Pawfit login failed: status={resp.status}")
+                self._logger.error(f"Pawfit login failed: status={resp.status}, body={resp_text}")
                 raise Exception("Incorrect username or password for Pawfit API")
+            
             try:
-                import json
                 data = json.loads(resp_text)
             except Exception as e:
                 self._logger.error(f"Failed to parse JSON from Pawfit login response: {e}")
                 raise Exception("Invalid response from Pawfit API")
+            
+            if not data.get("success", False):
+                self._logger.error(f"Pawfit login returned success=false: {data}")
+                raise Exception("Pawfit API login failed. Check your credentials.")
             
             data_field = data.get("data", {})
             user_id = data_field.get("userId")
             session_id = data_field.get("sessionId")
             
             if not user_id or not session_id:
-                self._logger.error(f"No userId or sessionId returned from Pawfit API")
+                self._logger.error(f"No userId or sessionId returned from Pawfit API: {data}")
                 raise Exception("No userId or sessionId returned from Pawfit API. Check your credentials.")
-            self._token = session_id
-            self._user_id = user_id
-            return {"userId": user_id, "sessionId": session_id}
+            
+            # Store as strings for consistent handling
+            self._user_id = str(user_id)
+            self._token = str(session_id)
+            
+            self._logger.info(f"Pawfit login successful: userId={self._user_id}")
+            return {"userId": self._user_id, "sessionId": self._token}
 
     def _append_auth_to_url(self, url: str) -> str:
         """Append userId and sessionId to the URL as path parameters."""
@@ -52,27 +120,77 @@ class PawfitApiClient:
             url = url[:-1]
         return f"{url}/{user_id}/{token}"
 
-    async def _request_with_reauth(self, method, url, headers, append_auth=True, **kwargs):
+    def _get_sign(self, tracker: str = "", identity: str = "", target: str = "", pet: str = "") -> str:
+        """Calculate the signature for authenticated API requests."""
+        user_id = getattr(self, "_user_id", None)
+        token = getattr(self, "_token", None)
+        if user_id is None or token is None:
+            raise Exception("PawfitApiClient is not authenticated. Call async_login() first.")
+        return calculate_api_sign(
+            user_id=str(user_id),
+            session_id=str(token),
+            identity=identity,
+            target=target,
+            tracker=tracker,
+            pet=pet
+        )
+
+    def _add_sign_to_params(self, params: dict = None, tracker: str = "", identity: str = "", target: str = "", pet: str = "") -> dict:
+        """Add signature to request parameters."""
+        if params is None:
+            params = {}
+        params["sign"] = self._get_sign(tracker=tracker, identity=identity, target=target, pet=pet)
+        return params
+
+    async def _request_with_reauth(self, method, url, headers, append_auth=True, sign_params=None, **kwargs):
+        """
+        Make a request with automatic re-authentication on 403.
+        
+        Args:
+            sign_params: Dict with optional keys 'tracker', 'identity', 'target', 'pet' 
+                        for signature calculation
+        """
         # Store the original URL before any auth modifications
         original_url = url
+        original_kwargs = kwargs.copy()
         
         if append_auth:
             url = self._append_auth_to_url(url)
         
+        # Add signature to params
+        sign_params = sign_params or {}
+        existing_params = kwargs.get("params", {}) or {}
+        kwargs["params"] = self._add_sign_to_params(
+            existing_params.copy(),
+            tracker=sign_params.get("tracker", ""),
+            identity=sign_params.get("identity", ""),
+            target=sign_params.get("target", ""),
+            pet=sign_params.get("pet", "")
+        )
+        
+        self._logger.debug(f"Making request: method={method}, url={url}, params={kwargs.get('params')}")
         resp = await self._session.request(method, url, headers=headers, **kwargs)
         
         if resp.status == 403:
             self._logger.warning("Pawfit API 403 received, attempting re-authentication.")
             login_data = await self.async_login()
-            self._user_id = login_data["userId"]
-            self._token = login_data["sessionId"]
             
             # Use the original URL and rebuild with new auth
             if append_auth:
                 url = self._append_auth_to_url(original_url)
             else:
                 url = original_url
-                
+            
+            # Recalculate signature with new credentials
+            existing_params = original_kwargs.get("params", {}) or {}
+            kwargs["params"] = self._add_sign_to_params(
+                existing_params.copy(),
+                tracker=sign_params.get("tracker", ""),
+                identity=sign_params.get("identity", ""),
+                target=sign_params.get("target", ""),
+                pet=sign_params.get("pet", "")
+            )
+            
             resp = await self._session.request(method, url, headers=headers, **kwargs)
         
         return resp
@@ -126,10 +244,15 @@ class PawfitApiClient:
         url = f"{BASE_URL}getlocationcaches/1/1"
         headers = {"User-Agent": USER_AGENT}
         tracker_ids_str = ",".join(str(tid) for tid in tracker_ids)
+        
+        # Build URL with auth path
         url = self._append_auth_to_url(url)
-        url = f"{url}?trackers={tracker_ids_str}"
-        self._logger.debug(f"Requesting locations: url={url}, headers={headers}, tracker_ids_str={tracker_ids_str}")
-        resp = await self._request_with_reauth("GET", url, headers, append_auth=False)
+        
+        # Add trackers as query param (sign will be added by _request_with_reauth)
+        params = {"trackers": tracker_ids_str}
+        
+        self._logger.debug(f"Requesting locations: url={url}, tracker_ids_str={tracker_ids_str}")
+        resp = await self._request_with_reauth("GET", url, headers, append_auth=False, params=params)
         resp_text = await resp.text()
         self._logger.debug(f"Raw locations response: {resp_text}")
         self._logger.debug(f"Request details: method=GET, url={url}, headers={headers}, tracker_ids={tracker_ids}, response_status={resp.status}, response_text={resp_text}")
@@ -212,11 +335,11 @@ class PawfitApiClient:
         if tracker_ids:
             tracker_ids_str = ",".join(str(tid) for tid in tracker_ids)
             url = self._append_auth_to_url(url)
-            url = f"{url}?trackers={tracker_ids_str}"
-            self._logger.debug(f"Requesting detailed status: url={url}, headers={headers}, tracker_ids_str={tracker_ids_str}")
-            resp = await self._request_with_reauth("GET", url, headers, append_auth=False)
+            params = {"trackers": tracker_ids_str}
+            self._logger.debug(f"Requesting detailed status: url={url}, params={params}")
+            resp = await self._request_with_reauth("GET", url, headers, append_auth=False, params=params)
         else:
-            self._logger.debug(f"Requesting detailed status: url={url}, headers={headers}")
+            self._logger.debug(f"Requesting detailed status: url={url}")
             resp = await self._request_with_reauth("GET", url, headers)
         resp_text = await resp.text()
         self._logger.debug(f"Raw detailed status response: {resp_text}")
@@ -266,7 +389,7 @@ class PawfitApiClient:
         
         self._logger.debug(f"Starting find mode: url={url}, params={params}")
         
-        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp = await self._request_with_reauth("GET", url, headers, params=params, sign_params={"tracker": str(tracker_id)})
         resp_text = await resp.text()
         self._logger.debug(f"Find mode start response: status={resp.status}, body={resp_text}")
         
@@ -294,7 +417,7 @@ class PawfitApiClient:
         
         self._logger.debug(f"Stopping find mode: url={url}, params={params}")
         
-        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp = await self._request_with_reauth("GET", url, headers, params=params, sign_params={"tracker": str(tracker_id)})
         resp_text = await resp.text()
         self._logger.debug(f"Find mode stop response: status={resp.status}, body={resp_text}")
         
@@ -325,7 +448,7 @@ class PawfitApiClient:
         
         self._logger.debug(f"Starting light mode: url={url}, params={params}")
         
-        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp = await self._request_with_reauth("GET", url, headers, params=params, sign_params={"tracker": str(tracker_id)})
         resp_text = await resp.text()
         self._logger.debug(f"Light mode start response: status={resp.status}, body={resp_text}")
         
@@ -352,7 +475,7 @@ class PawfitApiClient:
         
         self._logger.debug(f"Stopping light mode: url={url}, params={params}")
         
-        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp = await self._request_with_reauth("GET", url, headers, params=params, sign_params={"tracker": str(tracker_id)})
         resp_text = await resp.text()
         self._logger.debug(f"Light mode stop response: status={resp.status}, body={resp_text}")
         
@@ -380,7 +503,7 @@ class PawfitApiClient:
         
         self._logger.debug(f"Starting alarm mode: url={url}, params={params}")
         
-        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp = await self._request_with_reauth("GET", url, headers, params=params, sign_params={"tracker": str(tracker_id)})
         resp_text = await resp.text()
         self._logger.debug(f"Alarm mode start response: status={resp.status}, body={resp_text}")
         
@@ -408,7 +531,7 @@ class PawfitApiClient:
         
         self._logger.debug(f"Stopping alarm mode: url={url}, params={params}")
         
-        resp = await self._request_with_reauth("GET", url, headers, params=params)
+        resp = await self._request_with_reauth("GET", url, headers, params=params, sign_params={"tracker": str(tracker_id)})
         resp_text = await resp.text()
         self._logger.debug(f"Alarm mode stop response: status={resp.status}, body={resp_text}")
         
@@ -457,7 +580,7 @@ class PawfitApiClient:
         self._logger.debug(f"Request parameters: start={start_timestamp} ({datetime.fromtimestamp(start_timestamp/1000)}), end={end_timestamp} ({datetime.fromtimestamp(end_timestamp/1000)}), tracker={tracker_id}")
         
         try:
-            resp = await self._request_with_reauth("GET", url, headers, params=params)
+            resp = await self._request_with_reauth("GET", url, headers, params=params, sign_params={"tracker": str(tracker_id)})
             resp_text = await resp.text()
             
             self._logger.debug(f"Activity stats response: status={resp.status}, content_length={len(resp_text)}")
