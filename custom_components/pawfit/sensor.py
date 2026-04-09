@@ -45,11 +45,11 @@ class PawfitSensor(SensorEntity):
             battery_raw = int(value)
             model = loc.get("_raw", {}).get("model")
             if model == "TR2A":
-                # PawFit 2: 1=25%, 2=50%, 3=75%, 4=100%; value > 4 means charging
+                # PawFit 2: 1-3 scale (3=100%); value > 4 means charging
                 # Battery level cannot be determined while charging on PawFit 2
                 if battery_raw > 4:
                     return None
-                return battery_raw * 25
+                return round((battery_raw / 3) * 100)
             else:
                 # PawFit 3: negative value means charging, abs is the percentage
                 return abs(battery_raw)
@@ -244,7 +244,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     entities = []
     for tracker in coordinator.trackers:
-        entities.append(PawfitSensor(tracker, coordinator, "battery", "Battery Level", unit="%", icon="mdi:battery-medium", device_class=SensorDeviceClass.BATTERY))
+        entities.append(PawfitSensor(tracker, coordinator, "battery", "Battery Level", unit="%", device_class=SensorDeviceClass.BATTERY))
         entities.append(PawfitSensor(tracker, coordinator, "accuracy", "Location Accuracy", unit="m", icon="mdi:map-marker-radius"))
         entities.append(PawfitSensor(tracker, coordinator, "signal", "Signal Strength", unit="dBm", icon="mdi:wifi-strength-3", device_class=SensorDeviceClass.SIGNAL_STRENGTH))
         entities.append(PawfitTimestampSensor(tracker, coordinator, "last_update", "Last Time Seen", icon="mdi:clock-outline"))
