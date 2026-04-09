@@ -42,8 +42,17 @@ class PawfitSensor(SensorEntity):
         
         # Special handling for battery level
         if self._kind == "battery" and value is not None:
-            # If battery is negative, it means charging - return absolute value
-            return abs(int(value))
+            battery_raw = int(value)
+            model = loc.get("_raw", {}).get("model")
+            if model == "TR2A":
+                # PawFit 2: 1=25%, 2=50%, 3=75%, 4=100%; value > 4 means charging
+                # Battery level cannot be determined while charging on PawFit 2
+                if battery_raw > 4:
+                    return None
+                return battery_raw * 25
+            else:
+                # PawFit 3: negative value means charging, abs is the percentage
+                return abs(battery_raw)
         
         # Add debug logging specifically for activity sensors
         if self._kind in ["steps_today", "calories_today", "active_time_today"]:

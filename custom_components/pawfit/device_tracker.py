@@ -222,13 +222,25 @@ class PawfitDeviceTracker(TrackerEntity):
         battery_raw = data.get("battery")
         if battery_raw is not None:
             battery_value = int(battery_raw)
-            if battery_value < 0:
-                # Negative value indicates charging
+            model = data.get("_raw", {}).get("model")
+            if model == "TR2A":
+                # PawFit 2: 1=25%, 2=50%, 3=75%, 4=100%; value > 4 means charging
+                # Battery level cannot be determined while charging on PawFit 2
+                if battery_value > 4:
+                    self._attr_battery_level = None
+                    self._attr_charging = True
+                    logging.debug(f"Tracker {self._tracker_id}: PawFit 2 charging - level unknown")
+                else:
+                    self._attr_battery_level = battery_value * 25
+                    self._attr_charging = False
+                    logging.debug(f"Tracker {self._tracker_id}: PawFit 2 battery - raw: {battery_value}, level: {self._attr_battery_level}%")
+            elif battery_value < 0:
+                # PawFit 3: negative value indicates charging
                 self._attr_battery_level = abs(battery_value)
                 self._attr_charging = True
                 logging.debug(f"Tracker {self._tracker_id}: Battery charging - raw: {battery_value}, level: {self._attr_battery_level}")
             else:
-                # Positive value indicates not charging
+                # PawFit 3: positive value indicates not charging
                 self._attr_battery_level = battery_value
                 self._attr_charging = False
                 logging.debug(f"Tracker {self._tracker_id}: Battery not charging - raw: {battery_value}, level: {self._attr_battery_level}")

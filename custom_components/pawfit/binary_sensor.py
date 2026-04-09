@@ -35,7 +35,14 @@ class PawfitChargingSensor(BinarySensorEntity):
         data = self._coordinator.data.get(str(self._tracker_id), {})
         battery_raw = data.get("battery")
         if battery_raw is not None:
-            return int(battery_raw) < 0
+            model = data.get("_raw", {}).get("model")
+            if model == "TR2A":
+                # PawFit 2: value > 4 means charging (level unknown while charging)
+                _LOGGER.debug("Model is %s, special-case battery charging state", model)
+                return int(battery_raw) > 4
+            else:
+                # PawFit 3: negative value means charging
+                return int(battery_raw) < 0
         return None
 
     @property
