@@ -30,4 +30,4 @@ The suite exercises real HA setup, flow, entity, service and unload paths agains
 
 Physical testing remains necessary for tracker variants, battery encodings, daily activity units, command acknowledgement semantics and GPS timing. The API is reverse engineered. Adding/removing shared pets currently requires reloading the integration; dynamic discovery, configurable polling within safe limits and additional translations remain possible improvements. Avoid expanding commands without evidence of the API contract and tests for failure handling.
 
-The original README declares Apache 2.0 but the repository does not contain a LICENSE file; restoring the intended license text remains a maintainer follow-up.
+The Apache 2.0 license text declared by the original README has been restored for catalog validation.

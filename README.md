@@ -12,7 +12,17 @@ Thanks to **[@fullstackfool](https://github.com/fullstackfool/homeassistant-pawf
 
 Home Assistant **2026.9 or newer** is required. Automated tests currently cover 2026.9.4 and 2026.10.4; see [development](#development) for the exact environments.
 
-In HACS, add `https://github.com/dansbaker/homeassistant-pawfit` as a custom **Integration** repository, download Pawfit and restart Home Assistant. Then add **Pawfit Pet Tracker** under **Settings → Devices & services → Add integration**.
+### Marketplace (Home Assistant 2026.11+)
+
+Open **Settings → Marketplace**, connect GitHub if prompted, and add `https://github.com/dansbaker/homeassistant-pawfit` as a custom **Integration** repository. Download Pawfit and restart Home Assistant if requested. Then add **Pawfit Pet Tracker** under **Settings → Devices & services → Add integration**. Existing users keep their configured account and entities when updating.
+
+The searchable default-catalog listing is subject to review; until accepted, use the custom repository URL above.
+
+### HACS (Home Assistant 2026.9–2026.10)
+
+In HACS, add the same URL as a custom **Integration** repository, download Pawfit and restart Home Assistant. Then add **Pawfit Pet Tracker** under **Settings → Devices & services → Add integration**.
+
+### Manual installation
 
 For manual installation, copy `custom_components/pawfit` from this repository into your Home Assistant configuration's `custom_components` directory. Alternatively, extract the release's `pawfit.zip` **into `custom_components/pawfit/`**. Restart Home Assistant and add the integration.
 
@@ -77,4 +87,4 @@ Coverage includes polling limits, outage/recovery, partial responses, reauthenti
 
 ## License
 
-Apache 2.0
+[Apache 2.0](LICENSE)
