@@ -1,55 +1,51 @@
 name: Create Release
 
-permissions:
-  contents: write
-
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
 
 jobs:
+  validate:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/validate.yml
+
   release:
+    needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Get version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Create HACS zip
+      - uses: actions/checkout@v4
+      - name: Validate version and prepare HACS archive
+        id: prepare
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          # Create zip with the correct structure for HACS
-          # The zip should contain the integration files directly, not nested in custom_components/
-          cd custom_components/pawfit
-          zip -r ../../pawfit.zip . -x "__pycache__/*" "*/__pycache__/*"
-          cd ../../
-          # Add hacs.json to the zip
-          zip pawfit.zip hacs.json
-          
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          root = Path('custom_components/pawfit')
+          version = json.loads((root / 'manifest.json').read_text())['version']
+          assert os.environ['RELEASE_TAG'] == f'v{version}', 'Tag must match manifest version'
+          notes = Path('docs/releases') / f'{version}.md'
+          assert notes.is_file(), 'Credited release notes are required'
+          with ZipFile('pawfit.zip', 'w', ZIP_DEFLATED) as archive:
+              for path in sorted(root.rglob('*')):
+                  if path.is_file() and '__pycache__' not in path.parts and path.suffix != '.pyc':
+                      archive.write(path, path.relative_to(root))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print(f'version={version}', file=output)
+              print(f'notes={notes}', file=output)
+          PY
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
         with:
           files: pawfit.zip
-          name: "Version ${{ steps.get_version.outputs.VERSION }}"
-          body: |
-            ## What's Changed
-            
-            Auto-generated release for version ${{ steps.get_version.outputs.VERSION }}
-            
-            ### Installation via HACS
-            1. Add this repository to HACS as a custom repository
-            2. Search for "Pawfit" in HACS integrations
-            3. Install and restart Home Assistant
-            4. Add the integration via Settings > Devices & Services
-            
-            ### Manual Installation
-            1. Download the `pawfit.zip` file
-            2. Extract to your `custom_components` directory
-            3. Restart Home Assistant
+          fail_on_unmatched_files: true
+          name: "Version ${{ steps.prepare.outputs.version }}"
+          body_path: ${{ steps.prepare.outputs.notes }}
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

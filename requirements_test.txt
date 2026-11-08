@@ -1,0 +1,4 @@
+# Python 3.14; baseline supported Home Assistant test environment.
+pytest-homeassistant-custom-component==0.13.367
+pytest-cov==7.1.0
+ruff==0.14.3

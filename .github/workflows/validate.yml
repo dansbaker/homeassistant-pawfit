@@ -2,62 +2,49 @@ name: Validate Integration
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        requirements: [requirements_test.txt, requirements_test_2026_10.txt]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
-      - name: Install dependencies
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: ${{ matrix.requirements }}
+      - name: Install test dependencies
+        run: python -m pip install -r "${{ matrix.requirements }}"
+      - name: Lint
         run: |
-          python -m pip install --upgrade pip
-          pip install homeassistant
-          pip install pytest
-          pip install pytest-homeassistant-custom-component
-
-      - name: Validate manifest
+          ruff check custom_components tests
+          ruff format --check custom_components tests
+      - name: Test with branch coverage
+        run: >-
+          python -m pytest -q --cov=custom_components.pawfit --cov-branch
+          --cov-report=term-missing --cov-report=xml --cov-fail-under=95
+      - name: Validate metadata and translations
         run: |
-          python -c "
+          python - <<'PY'
           import json
-          with open('custom_components/pawfit/manifest.json') as f:
-              manifest = json.load(f)
-          print(f'Domain: {manifest[\"domain\"]}')
-          print(f'Version: {manifest[\"version\"]}')
+          from pathlib import Path
+          root = Path('custom_components/pawfit')
+          manifest = json.loads((root / 'manifest.json').read_text())
           assert manifest['domain'] == 'pawfit'
-          assert 'version' in manifest
-          print('Manifest validation passed!')
-          "
-
-      - name: Check Python syntax
-        run: |
-          python -m py_compile custom_components/pawfit/*.py
-
-      - name: Run tests
-        run: |
-          if [ -d "tests" ]; then
-            python -m pytest tests/ -v
-          else
-            echo "No tests directory found, skipping tests"
-          fi
-
-      - name: Validate HACS
-        run: |
-          python -c "
-          import json
-          with open('hacs.json') as f:
-              hacs = json.load(f)
-          print(f'HACS Name: {hacs[\"name\"]}')
-          assert 'name' in hacs
-          assert 'zip_release' in hacs
-          print('HACS validation passed!')
-          "
+          assert manifest['codeowners'] == ['@dansbaker']
+          assert manifest['config_flow']
+          hacs = json.loads(Path('hacs.json').read_text())
+          assert hacs['zip_release'] and hacs['filename'] == 'pawfit.zip'
+          assert json.loads((root / 'strings.json').read_text()) == json.loads((root / 'translations/en.json').read_text())
+          PY

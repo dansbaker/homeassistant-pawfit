@@ -1,298 +1,59 @@
-"""Button platform for Pawfit integration."""
+"""Pawfit mode controls; ordinary refreshes never switch to fast polling."""
 
-import logging
-import time
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import callback
-from homeassistant.exceptions import HomeAssistantError
-
 from .const import DOMAIN
 
-_LOGGER = logging.getLogger(__name__)
 
+class PawfitModeButton(ButtonEntity):
+    mode = "find"
+    mode_icon = "mdi:crosshairs-gps"
 
-class PawfitFindModeButton(ButtonEntity):
-    """Button to activate/deactivate Find Mode."""
-    
     def __init__(self, tracker, coordinator):
-        self._tracker = tracker
         self._coordinator = coordinator
         self._tracker_id = tracker["tracker_id"]
-        self._attr_name = f"{tracker['name']}'s PawFit Tracker Find Mode"
-        self._attr_unique_id = f"{tracker['petId']}_find_mode_button"
-        self._attr_icon = "mdi:crosshairs-gps"
+        self._attr_name = f"{tracker['name']}'s PawFit Tracker {self.mode.title()} Mode"
+        self._attr_unique_id = f"{tracker['petId']}_{self.mode}_mode_button"
+        self._attr_icon = self.mode_icon
         self._attr_device_info = {
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
             "model": tracker.get("model", "Unknown"),
-            "manufacturer": "PawFit",
         }
 
     @property
     def available(self):
-        """Return if entity is available."""
-        return self._coordinator.last_update_success
+        return self._coordinator.tracker_available(self._tracker_id)
 
-    async def async_press(self) -> None:
-        """Handle the button press."""
-        try:
-            # Check if find mode is currently active
-            data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
-            find_timer = data.get("find_timer", 0)
-            
-            if find_timer and find_timer > 0:
-                # Check if within 10 minutes (active)
-                try:
-                    # Timer values from API are in milliseconds, convert to seconds
-                    timer_start_seconds = find_timer / 1000.0
-                    current_time_seconds = time.time()
-                    elapsed_seconds = current_time_seconds - timer_start_seconds
-                    is_active = elapsed_seconds < 600  # 10 minutes
-                    
-                    if is_active:
-                        # Find mode is active, so stop it
-                        success = await self._coordinator.client.async_stop_find_mode(str(self._tracker_id))
-                        if success:
-                            _LOGGER.info(f"Successfully stopped find mode for tracker {self._tracker_id}")
-                            # Show the mode as off straight away; no extra fetch (fork change)
-                            self._coordinator.async_set_mode_timer(self._tracker_id, "find_timer", 0)
-                        else:
-                            raise HomeAssistantError(f"Failed to stop find mode for tracker {self._tracker_id}")
-                    else:
-                        # Timer expired, start new find mode
-                        success = await self._coordinator.client.async_start_find_mode(str(self._tracker_id))
-                        if success:
-                            _LOGGER.info(f"Successfully started find mode for tracker {self._tracker_id}")
-                            # Show the mode as on straight away; no extra fetch (fork change)
-                            self._coordinator.async_set_mode_timer(self._tracker_id, "find_timer", int(time.time() * 1000))
-                        else:
-                            raise HomeAssistantError(f"Failed to start find mode for tracker {self._tracker_id}")
-                except (ValueError, TypeError):
-                    # Invalid timer, start new find mode
-                    success = await self._coordinator.client.async_start_find_mode(str(self._tracker_id))
-                    if success:
-                        _LOGGER.info(f"Successfully started find mode for tracker {self._tracker_id}")
-                        # Show the mode as on straight away; no extra fetch (fork change)
-                        self._coordinator.async_set_mode_timer(self._tracker_id, "find_timer", int(time.time() * 1000))
-                    else:
-                        raise HomeAssistantError(f"Failed to start find mode for tracker {self._tracker_id}")
-            else:                        # Find mode is not active, so start it
-                        success = await self._coordinator.client.async_start_find_mode(str(self._tracker_id))
-                        if success:
-                            _LOGGER.info(f"Successfully started find mode for tracker {self._tracker_id}")
-                            # Show the mode as on straight away; no extra fetch (fork change)
-                            self._coordinator.async_set_mode_timer(self._tracker_id, "find_timer", int(time.time() * 1000))
-                        else:
-                            raise HomeAssistantError(f"Failed to start find mode for tracker {self._tracker_id}")
-        except Exception as e:
-            _LOGGER.error(f"Error controlling find mode for tracker {self._tracker_id}: {e}")
-            raise HomeAssistantError(f"Error controlling find mode: {e}")
+    async def async_press(self):
+        await self._coordinator.async_toggle_mode(self._tracker_id, self.mode)
 
     async def async_added_to_hass(self):
-        """When entity is added to hass."""
         await super().async_added_to_hass()
-        # Register for coordinator updates
         self.async_on_remove(
             self._coordinator.async_add_listener(self._handle_coordinator_update)
         )
 
     @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
+    def _handle_coordinator_update(self):
         self.async_write_ha_state()
 
 
-class PawfitLightModeButton(ButtonEntity):
-    """Button to activate/deactivate Light Mode."""
-    
-    def __init__(self, tracker, coordinator):
-        self._tracker = tracker
-        self._coordinator = coordinator
-        self._tracker_id = tracker["tracker_id"]
-        self._attr_name = f"{tracker['name']}'s PawFit Tracker Light Mode"
-        self._attr_unique_id = f"{tracker['petId']}_light_mode_button"
-        self._attr_icon = "mdi:flashlight"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, str(self._tracker_id))},
-            "name": f"{tracker['name']}'s PawFit Tracker",
-            "model": tracker.get("model", "Unknown"),
-            "manufacturer": "PawFit"
-        }
-
-    @property
-    def available(self):
-        """Return if entity is available."""
-        return self._coordinator.last_update_success
-
-    async def async_press(self) -> None:
-        """Handle the button press."""
-        try:
-            # Check if light mode is currently active
-            data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
-            light_timer = data.get("light_timer", 0)
-            
-            if light_timer and light_timer > 0:
-                # Check if within 10 minutes (active)
-                try:
-                    # Timer values from API are in milliseconds, convert to seconds
-                    timer_start_seconds = light_timer / 1000.0
-                    current_time_seconds = time.time()
-                    elapsed_seconds = current_time_seconds - timer_start_seconds
-                    is_active = elapsed_seconds < 600  # 10 minutes
-                    
-                    if is_active:
-                        # Light mode is active, so stop it
-                        success = await self._coordinator.client.async_stop_light_mode(str(self._tracker_id))
-                        if success:
-                            _LOGGER.info(f"Successfully stopped light mode for tracker {self._tracker_id}")
-                            # Show the mode as off straight away; no extra fetch (fork change)
-                            self._coordinator.async_set_mode_timer(self._tracker_id, "light_timer", 0)
-                        else:
-                            raise HomeAssistantError(f"Failed to stop light mode for tracker {self._tracker_id}")
-                    else:
-                        # Timer expired, start new light mode
-                        success = await self._coordinator.client.async_start_light_mode(str(self._tracker_id))
-                        if success:
-                            _LOGGER.info(f"Successfully started light mode for tracker {self._tracker_id}")
-                            # Show the mode as on straight away; no extra fetch (fork change)
-                            self._coordinator.async_set_mode_timer(self._tracker_id, "light_timer", int(time.time() * 1000))
-                        else:
-                            raise HomeAssistantError(f"Failed to start light mode for tracker {self._tracker_id}")
-                except (ValueError, TypeError):
-                    # Invalid timer, start new light mode
-                    success = await self._coordinator.client.async_start_light_mode(str(self._tracker_id))
-                    if success:
-                        _LOGGER.info(f"Successfully started light mode for tracker {self._tracker_id}")
-                        # Show the mode as on straight away; no extra fetch (fork change)
-                        self._coordinator.async_set_mode_timer(self._tracker_id, "light_timer", int(time.time() * 1000))
-                    else:
-                        raise HomeAssistantError(f"Failed to start light mode for tracker {self._tracker_id}")
-            else:
-                # Light mode is not active, so start it
-                success = await self._coordinator.client.async_start_light_mode(str(self._tracker_id))
-                if success:
-                    _LOGGER.info(f"Successfully started light mode for tracker {self._tracker_id}")
-                    # Show the mode as on straight away; no extra fetch (fork change)
-                    self._coordinator.async_set_mode_timer(self._tracker_id, "light_timer", int(time.time() * 1000))
-                else:
-                    raise HomeAssistantError(f"Failed to start light mode for tracker {self._tracker_id}")
-        except Exception as e:
-            _LOGGER.error(f"Error controlling light mode for tracker {self._tracker_id}: {e}")
-            raise HomeAssistantError(f"Error controlling light mode: {e}")
-
-    async def async_added_to_hass(self):
-        """When entity is added to hass."""
-        await super().async_added_to_hass()
-        # Register for coordinator updates
-        self.async_on_remove(
-            self._coordinator.async_add_listener(self._handle_coordinator_update)
-        )
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        self.async_write_ha_state()
+class PawfitFindModeButton(PawfitModeButton):
+    mode = "find"
 
 
-class PawfitAlarmModeButton(ButtonEntity):
-    """Button to activate/deactivate Alarm Mode."""
-    
-    def __init__(self, tracker, coordinator):
-        self._tracker = tracker
-        self._coordinator = coordinator
-        self._tracker_id = tracker["tracker_id"]
-        self._attr_name = f"{tracker['name']}'s PawFit Tracker Alarm Mode"
-        self._attr_unique_id = f"{tracker['petId']}_alarm_mode_button"
-        self._attr_icon = "mdi:alarm-light"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, str(self._tracker_id))},
-            "name": f"{tracker['name']}'s PawFit Tracker",
-            "model": tracker.get("model", "Unknown"),
-            "manufacturer": "PawFit"
-        }
+class PawfitLightModeButton(PawfitModeButton):
+    mode = "light"
+    mode_icon = "mdi:flashlight"
 
-    @property
-    def available(self):
-        """Return if entity is available."""
-        return self._coordinator.last_update_success
 
-    async def async_press(self) -> None:
-        """Handle the button press."""
-        try:
-            # Check if alarm mode is currently active
-            data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
-            alarm_timer = data.get("alarm_timer", 0)
-            
-            if alarm_timer and alarm_timer > 0:
-                # Check if within 10 minutes (active)
-                try:
-                    # Timer values from API are in milliseconds, convert to seconds
-                    timer_start_seconds = alarm_timer / 1000.0
-                    current_time_seconds = time.time()
-                    elapsed_seconds = current_time_seconds - timer_start_seconds
-                    is_active = elapsed_seconds < 600  # 10 minutes
-                    
-                    if is_active:
-                        # Alarm mode is active, so stop it
-                        success = await self._coordinator.client.async_stop_alarm_mode(str(self._tracker_id))
-                        if success:
-                            _LOGGER.info(f"Successfully stopped alarm mode for tracker {self._tracker_id}")
-                            # Show the mode as off straight away; no extra fetch (fork change)
-                            self._coordinator.async_set_mode_timer(self._tracker_id, "alarm_timer", 0)
-                        else:
-                            raise HomeAssistantError(f"Failed to stop alarm mode for tracker {self._tracker_id}")
-                    else:
-                        # Timer expired, start new alarm mode
-                        success = await self._coordinator.client.async_start_alarm_mode(str(self._tracker_id))
-                        if success:
-                            _LOGGER.info(f"Successfully started alarm mode for tracker {self._tracker_id}")
-                            # Show the mode as on straight away; no extra fetch (fork change)
-                            self._coordinator.async_set_mode_timer(self._tracker_id, "alarm_timer", int(time.time() * 1000))
-                        else:
-                            raise HomeAssistantError(f"Failed to start alarm mode for tracker {self._tracker_id}")
-                except (ValueError, TypeError):
-                    # Invalid timer, start new alarm mode
-                    success = await self._coordinator.client.async_start_alarm_mode(str(self._tracker_id))
-                    if success:
-                        _LOGGER.info(f"Successfully started alarm mode for tracker {self._tracker_id}")
-                        # Show the mode as on straight away; no extra fetch (fork change)
-                        self._coordinator.async_set_mode_timer(self._tracker_id, "alarm_timer", int(time.time() * 1000))
-                    else:
-                        raise HomeAssistantError(f"Failed to start alarm mode for tracker {self._tracker_id}")
-            else:
-                # Alarm mode is not active, so start it
-                success = await self._coordinator.client.async_start_alarm_mode(str(self._tracker_id))
-                if success:
-                    _LOGGER.info(f"Successfully started alarm mode for tracker {self._tracker_id}")
-                    # Show the mode as on straight away; no extra fetch (fork change)
-                    self._coordinator.async_set_mode_timer(self._tracker_id, "alarm_timer", int(time.time() * 1000))
-                else:
-                    raise HomeAssistantError(f"Failed to start alarm mode for tracker {self._tracker_id}")
-        except Exception as e:
-            _LOGGER.error(f"Error controlling alarm mode for tracker {self._tracker_id}: {e}")
-            raise HomeAssistantError(f"Error controlling alarm mode: {e}")
-
-    async def async_added_to_hass(self):
-        """When entity is added to hass."""
-        await super().async_added_to_hass()
-        # Register for coordinator updates
-        self.async_on_remove(
-            self._coordinator.async_add_listener(self._handle_coordinator_update)
-        )
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        self.async_write_ha_state()
+class PawfitAlarmModeButton(PawfitModeButton):
+    mode = "alarm"
+    mode_icon = "mdi:alarm-light"
 
 
 class PawfitLocateButton(ButtonEntity):
-    """Get a fresh position from every tracker now (fork change).
-
-    Turns Find mode on, then off again for each tracker once it reports.
-    binary_sensor.pawfit_locating is on while it waits.
-    """
-
     _attr_icon = "mdi:crosshairs-gps"
 
     def __init__(self, coordinator, entry_id):
@@ -304,19 +65,26 @@ class PawfitLocateButton(ButtonEntity):
     def available(self):
         return self._coordinator.last_update_success
 
-    async def async_press(self) -> None:
+    async def async_press(self):
         await self._coordinator.async_locate()
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._coordinator.async_add_listener(self.async_write_ha_state)
+        )
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up Pawfit button entities from a config entry."""
-    # Get the coordinator from hass.data (created in __init__.py)
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    
     entities = [PawfitLocateButton(coordinator, entry.entry_id)]
     for tracker in coordinator.trackers:
-        entities.append(PawfitFindModeButton(tracker, coordinator))
-        entities.append(PawfitLightModeButton(tracker, coordinator))
-        entities.append(PawfitAlarmModeButton(tracker, coordinator))
-    
+        entities.extend(
+            cls(tracker, coordinator)
+            for cls in (
+                PawfitFindModeButton,
+                PawfitLightModeButton,
+                PawfitAlarmModeButton,
+            )
+        )
     async_add_entities(entities)

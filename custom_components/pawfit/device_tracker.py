@@ -1,14 +1,18 @@
+import asyncio
+import math
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.helpers.entity import Entity
 from homeassistant.components.device_tracker import TrackerEntity, SourceType
 from homeassistant.core import callback
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.helpers.event import async_call_later
 from homeassistant.util import dt as dt_util
 
-from .pawfit_api import PawfitApiClient
+from .exceptions import PawfitAuthenticationError
+from .helpers import charging, mode_remaining
 from .const import (
     DOMAIN,
     UPDATE_INTERVAL_SECONDS,
@@ -20,36 +24,44 @@ from .const import (
     STALE_AFTER_SECONDS,
 )
 
-# Define SOURCE_TYPE_GPS constant for device tracker
-SOURCE_TYPE_GPS = "gps"
 
-# Fallback: define DeviceTrackerEntity as base Entity if import fails
-try:
-    from homeassistant.components.device_tracker import TrackerEntity, SourceType
-except ImportError:
-    class SourceType:
-        GPS = "gps"
-    class TrackerEntity(Entity):
-        pass
-
-def _mode_active(timer_ms) -> bool:
-    """True if a Find/Light/Alarm timer (ms since epoch) started under 10 minutes ago."""
-    try:
-        elapsed = time.time() - float(timer_ms) / 1000
-    except (TypeError, ValueError):
-        return False
-    return bool(timer_ms) and 0 <= elapsed < 600
+def _mode_active(timer_ms):
+    return mode_remaining(timer_ms) > 0
 
 
 def fix_time(tracker_data):
     """When the tracker last reported its position (seconds since epoch), or None."""
     if not tracker_data:
         return None
-    raw = tracker_data.get("_raw") or {}
-    value = (raw.get("state") or {}).get("location", {}).get("utcDateTime")
+    raw = tracker_data.get("_raw")
+    if not isinstance(raw, dict) or not isinstance(raw.get("state"), dict):
+        return None
+    location = raw["state"].get("location")
+    if not isinstance(location, dict):
+        return None
+    value = location.get("utcDateTime")
     try:
-        return float(value) if value else None
-    except (TypeError, ValueError):
+        value = float(value)
+        if (
+            not math.isfinite(value)
+            or value <= 0
+            or value > time.time() + LOCATE_CLOCK_SLACK_SECONDS
+        ):
+            return None
+        dt_util.utc_from_timestamp(value)
+        return value
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def coordinate(value, minimum, maximum):
+    """Accept finite coordinates, including zero; reject malformed payload values."""
+    if isinstance(value, bool):
+        return None
+    try:
+        value = float(value)
+        return value if math.isfinite(value) and minimum <= value <= maximum else None
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -85,14 +97,26 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         self.fetches_today = 0
         self._fetch_day = None
         self._last_success = None  # time.monotonic() of the last good location fetch
-        self._failing_since = None  # time.monotonic() when the current failure streak began
+        self._failing_since = (
+            None  # time.monotonic() when the current failure streak began
+        )
         # Locate (fork change): time.time() the current locate began, or None.
         self.locate_started = None
         # str(tracker_id) -> True if Locate turned Find mode on (so it turns it off).
         self._locate_pending = {}
+        self._locate_baseline = {}
+        self._locate_errors = []
+        self._cleanup_pending = set()
+        self._cleanup_attempts = {}
+        self._locate_cancel = None
+        self._locate_timeout_task = None
+        self._command_lock = asyncio.Lock()
+        self._tracker_success = {}
         self.locate_last_result = None
         self.locate_last_finished = None  # datetime (UTC)
-        self.logger.info(f"PawfitDataUpdateCoordinator initialized with trackers: {self.tracker_ids}")
+        self.logger.info(
+            f"PawfitDataUpdateCoordinator initialized with trackers: {self.tracker_ids}"
+        )
 
     def _seconds_since_fetch(self):
         if self._last_fetch is None:
@@ -109,7 +133,9 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         """
         since = self._seconds_since_fetch()
         if since is not None and since < UPDATE_INTERVAL_SECONDS:
-            self.logger.debug("Refresh request ignored: last Pawfit fetch %.0f s ago", since)
+            self.logger.debug(
+                "Refresh request ignored: last Pawfit fetch %.0f s ago", since
+            )
             return
         await super().async_request_refresh()
 
@@ -137,73 +163,182 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
     def locate_waiting_for(self) -> list:
         return [self.tracker_name(tid) for tid in self._locate_pending]
 
-    async def async_locate(self) -> None:
-        """Ask every tracker for a fresh position now (fork change).
+    def tracker_available(self, tracker_id):
+        return self.last_update_success and str(tracker_id) in (self.data or {})
 
-        Pawfit has no one-off "locate" call, so this turns Find mode on and
-        waits: positions are still fetched once a minute, and as soon as a
-        tracker reports a position newer than the press, Find mode is turned
-        off again for it (to save its battery). Trackers that were already
-        in Find mode are left as they were. Gives up after
-        LOCATE_TIMEOUT_SECONDS.
-        """
-        if self.locate_started is not None:
-            self.logger.debug("Locate already running")
-            return
-        self.locate_started = time.time()
-        self._locate_pending = {}
-        for tracker_id in self.tracker_ids:
+    async def async_toggle_mode(self, tracker_id, mode):
+        """Serialize user controls with Locate; user changes take ownership."""
+        async with self._command_lock:
             tid = str(tracker_id)
-            data = (self.data or {}).get(tid, {})
-            if _mode_active(data.get("find_timer")):
-                self._locate_pending[tid] = False
-                continue
+            if not self.tracker_available(tid):
+                raise HomeAssistantError("Tracker data is unavailable")
+            key = mode + "_timer"
+            active = _mode_active(self.data[tid].get(key))
+            method = getattr(
+                self.client, f"async_{'stop' if active else 'start'}_{mode}_mode"
+            )
             try:
-                started = await self.client.async_start_find_mode(tid)
-            except Exception as err:  # noqa: BLE001
-                self.logger.warning("Locate: couldn't start Find mode for %s: %r", self.tracker_name(tid), err)
-                started = False
-            self._locate_pending[tid] = bool(started)
-            if started and self.data and tid in self.data:
-                self.data[tid]["find_timer"] = int(time.time() * 1000)
-        self.logger.info("Locate started for %s", ", ".join(self.locate_waiting_for))
+                success = await method(tid)
+            except Exception:
+                raise HomeAssistantError(
+                    "Pawfit command could not be delivered"
+                ) from None
+            if not success:
+                raise HomeAssistantError("Pawfit rejected the command")
+            self.async_set_mode_timer(
+                tid, key, 0 if active else int(time.time() * 1000)
+            )
+            if mode == "find":
+                self._cleanup_pending.discard(tid)
+                if tid in self._locate_pending:
+                    self._locate_pending.pop(tid)
+                    self._locate_errors.append(
+                        "Manual Find change for " + self.tracker_name(tid)
+                    )
+                    if not self._locate_pending:
+                        self._finish_locate()
+            self.async_update_listeners()
+
+    async def async_locate(self):
+        async with self._command_lock:
+            if self.locate_started is not None:
+                return
+            if self._cleanup_pending:
+                raise HomeAssistantError(
+                    "Find cleanup is pending; switch Find off before starting another Locate"
+                )
+            self.locate_started = time.time()
+            self._locate_deadline = time.monotonic() + LOCATE_TIMEOUT_SECONDS
+            self._locate_pending = {}
+            self._locate_errors = []
+            self._locate_baseline = {
+                str(t): fix_time((self.data or {}).get(str(t)))
+                for t in self.tracker_ids
+            }
+            for tracker_id in self.tracker_ids:
+                tid = str(tracker_id)
+                data = (self.data or {}).get(tid, {})
+                if _mode_active(data.get("find_timer")):
+                    self._locate_pending[tid] = False
+                    continue
+                try:
+                    started = await self.client.async_start_find_mode(tid)
+                except Exception:
+                    started = False
+                if not started:
+                    self._locate_errors.append(
+                        "Could not start Find for " + self.tracker_name(tid)
+                    )
+                    continue
+                self._locate_pending[tid] = True
+                if self.data and tid in self.data:
+                    self.data[tid]["find_timer"] = int(time.time() * 1000)
+            if not self._locate_pending:
+                self._finish_locate()
+                self.async_update_listeners()
+                raise HomeAssistantError("Pawfit could not start Locate")
+
+            @callback
+            def timeout(_now):
+                self._locate_timeout_task = self.hass.async_create_task(
+                    self._async_locate_timeout()
+                )
+
+            self._locate_cancel = async_call_later(
+                self.hass, max(0, self._locate_deadline - time.monotonic()), timeout
+            )
+            self.async_update_listeners()
+
+    async def _async_locate_timeout(self):
+        await self._async_check_locate(self.data, force_timeout=True)
         self.async_update_listeners()
 
-    async def _async_check_locate(self, location_data) -> None:
-        """Finish trackers that have reported since Locate began; time out the rest."""
-        if self.locate_started is None:
-            return
-        for tid in list(self._locate_pending):
-            fix = fix_time((location_data or {}).get(tid))
-            # A little slack for the tracker's clock being behind ours.
-            if fix is not None and fix >= self.locate_started - LOCATE_CLOCK_SLACK_SECONDS:
-                await self._async_end_find(tid, location_data)
-        timed_out = time.time() - self.locate_started >= LOCATE_TIMEOUT_SECONDS
-        if self._locate_pending and not timed_out:
-            return
-        if self._locate_pending:
-            missing = self.locate_waiting_for
+    async def _async_check_locate(self, location_data, force_timeout=False):
+        async with self._command_lock:
+            # Retry failed cleanup only a bounded number of times; never claim
+            # the tracker stopped until the API acknowledges it.
+            for tid in list(self._cleanup_pending):
+                if self._cleanup_attempts.get(tid, 0) < 3:
+                    self._cleanup_attempts[tid] = self._cleanup_attempts.get(tid, 0) + 1
+                    if await self._async_stop_owned_find(tid, location_data):
+                        self._cleanup_pending.discard(tid)
+            if self.locate_started is None:
+                return
+            timed_out = force_timeout or time.monotonic() >= self._locate_deadline
             for tid in list(self._locate_pending):
-                await self._async_end_find(tid, location_data)
-            self.locate_last_result = "No new position from " + ", ".join(missing)
-            self.logger.warning("Locate: %s", self.locate_last_result)
+                fix = fix_time((location_data or {}).get(tid))
+                baseline = self._locate_baseline.get(tid)
+                fresh = (
+                    fix is not None
+                    and (baseline is None or fix > baseline)
+                    and fix >= self.locate_started - LOCATE_CLOCK_SLACK_SECONDS
+                )
+                if not fresh and not timed_out:
+                    continue
+                if not fresh:
+                    self._locate_errors.append(
+                        "No new position from " + self.tracker_name(tid)
+                    )
+                owned = self._locate_pending[tid]
+                if owned and not await self._async_stop_owned_find(tid, location_data):
+                    self._cleanup_pending.add(tid)
+                    self._cleanup_attempts[tid] = 1
+                    self._locate_errors.append(
+                        "Find may still be active for " + self.tracker_name(tid)
+                    )
+                self._locate_pending.pop(tid)
+            if not self._locate_pending:
+                self._finish_locate()
+
+    async def _async_stop_owned_find(self, tid, location_data):
+        try:
+            stopped = await self.client.async_stop_find_mode(tid)
+        except Exception:
+            stopped = False
+        if not stopped:
+            return False
+        for data in (location_data, self.data):
+            if data and tid in data:
+                data[tid]["find_timer"] = 0
+        return True
+
+    def _finish_locate(self):
+        if self._locate_cancel:
+            self._locate_cancel()
+            self._locate_cancel = None
+        if self._locate_errors and all(
+            s.startswith("No new position from ") for s in self._locate_errors
+        ):
+            self.locate_last_result = "No new position from " + ", ".join(
+                s.removeprefix("No new position from ") for s in self._locate_errors
+            )
         else:
-            self.locate_last_result = "All found"
-            self.logger.info("Locate: all trackers reported")
+            self.locate_last_result = (
+                "; ".join(self._locate_errors) if self._locate_errors else "All found"
+            )
         self.locate_started = None
         self.locate_last_finished = dt_util.utcnow()
 
-    async def _async_end_find(self, tid, location_data) -> None:
-        started_by_locate = self._locate_pending.pop(tid, False)
-        if not started_by_locate:
-            return
-        try:
-            await self.client.async_stop_find_mode(tid)
-        except Exception as err:  # noqa: BLE001
-            self.logger.warning("Locate: couldn't stop Find mode for %s: %r", self.tracker_name(tid), err)
-            return
-        if location_data and tid in location_data:
-            location_data[tid]["find_timer"] = 0
+    async def async_shutdown(self):
+        if self._locate_cancel:
+            self._locate_cancel()
+            self._locate_cancel = None
+        if self._locate_timeout_task and not self._locate_timeout_task.done():
+            self._locate_timeout_task.cancel()
+            await asyncio.gather(self._locate_timeout_task, return_exceptions=True)
+        async with self._command_lock:
+            owned = {
+                t for t, own in self._locate_pending.items() if own
+            } | self._cleanup_pending
+            for tid in owned:
+                if not await self._async_stop_owned_find(tid, self.data):
+                    self.logger.warning(
+                        "Pawfit Find cleanup could not be confirmed during unload"
+                    )
+            self._locate_pending.clear()
+            self._cleanup_pending.clear()
+            self.locate_started = None
+        await super().async_shutdown()
 
     def _keep_last_data(self, err, now):
         """Ride out a failed fetch with the last known data (fork change).
@@ -218,7 +353,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             self._failing_since = now
             self.logger.warning(
                 "Pawfit fetch failed (%r); keeping the last known data for up to %d min",
-                err,
+                type(err).__name__,
                 KEEP_LAST_DATA_SECONDS // 60,
             )
         if (
@@ -226,8 +361,10 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
             and self._last_success is not None
             and now - self._last_success < KEEP_LAST_DATA_SECONDS
         ):
-            return self.data
-        raise UpdateFailed(f"No data from Pawfit: {err!r}") from err
+            return {
+                tid: {**data, "data_cached": True} for tid, data in self.data.items()
+            }
+        raise UpdateFailed("No recent data from Pawfit") from None
 
     def _count_fetch(self) -> None:
         today = dt_util.now().date()
@@ -241,7 +378,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         if since is not None and since < MIN_FETCH_SPACING_SECONDS:
             # Second guard: nothing reaches the Pawfit API inside the limit.
             self.logger.debug("Fetch skipped: last Pawfit fetch %.0f s ago", since)
-            if self.data is not None:
+            if self.data is not None and self.last_update_success:
                 return self.data
             raise UpdateFailed("Waiting for the Pawfit rate limit")
         now = time.monotonic()
@@ -251,23 +388,41 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         self.logger.debug(f"_async_update_data called for trackers: {self.tracker_ids}")
         try:
             location_data = await self.client.async_get_locations(self.tracker_ids)
+        except PawfitAuthenticationError:
+            raise ConfigEntryAuthFailed("Pawfit credentials were rejected") from None
         except Exception as err:  # timeouts, connection errors, bad responses
             await self._async_check_locate(None)
-            return self._keep_last_data(err, now)
+            return self._keep_last_data(err, time.monotonic())
         location_data = {str(k): v for k, v in (location_data or {}).items()}
         if not location_data:
             await self._async_check_locate(None)
-            return self._keep_last_data(UpdateFailed("no trackers in Pawfit's response"), now)
+            return self._keep_last_data(
+                UpdateFailed("no trackers in Pawfit's response"), now
+            )
         if self._failing_since is not None:
             self.logger.warning(
                 "Pawfit fetch recovered after %.0f s", now - self._failing_since
             )
         self._failing_since = None
-        self._last_success = now
+        self._last_success = time.monotonic()
+        for tid, data in location_data.items():
+            self._tracker_success[tid] = self._last_success
+            data["data_cached"] = False
+        # A partial account response must not erase another tracker's recent
+        # position, nor keep it alive forever because a different pet responds.
+        for tid, data in (self.data or {}).items():
+            if (
+                tid not in location_data
+                and self._last_success - self._tracker_success.get(tid, -math.inf)
+                < KEEP_LAST_DATA_SECONDS
+            ):
+                location_data[tid] = {**data, "data_cached": True}
 
         # The Find/Light/Alarm timers are in the same response; upstream
         # fetched it a second time to read them.
         for tracker_data in location_data.values():
+            if tracker_data.get("data_cached"):
+                continue
             raw = tracker_data.get("_raw") or {}
             tracker_data["find_timer"] = raw.get("timerGps", 0)
             tracker_data["light_timer"] = raw.get("timerLight", 0)
@@ -277,11 +432,13 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         for tracker_id_str, tracker_data in location_data.items():
             stats = self._activity.get(tracker_id_str)
             if stats is not None:
-                tracker_data.update({
-                    "steps_today": stats.get("total_steps", 0),
-                    "calories_today": stats.get("total_calories", 0.0),
-                    "active_time_today": stats.get("total_active_hours", 0.0),
-                })
+                tracker_data.update(
+                    {
+                        "steps_today": stats.get("total_steps", 0),
+                        "calories_today": stats.get("total_calories", 0.0),
+                        "active_time_today": stats.get("total_active_hours", 0.0),
+                    }
+                )
 
         await self._async_check_locate(location_data)
         return location_data
@@ -289,7 +446,7 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_activity(self, now) -> None:
         """Fetch daily activity if it is due (every 15 min, or a new day)."""
         # Same clock as the activity request's midnight-to-midnight window.
-        today = datetime.now().date()
+        today = self.client._now().date()
         due = (
             self._activity_fetched is None
             or today != self._activity_day
@@ -299,14 +456,29 @@ class PawfitDataUpdateCoordinator(DataUpdateCoordinator):
         if not due:
             return
         self._activity_fetched = now
+        if self._activity_day != today:
+            self._activity.clear()
         self._activity_day = today
         for tracker_id in self.tracker_ids:
-            # Returns zeros rather than raising if Pawfit fails.
-            stats = await self.client.async_get_activity_stats(str(tracker_id))
-            self.logger.debug(f"Received activity stats for tracker {tracker_id}: {stats}")
+            # Keep the last valid same-day total if this optional request fails.
+            try:
+                stats = await self.client.async_get_activity_stats(str(tracker_id))
+            except PawfitAuthenticationError:
+                raise ConfigEntryAuthFailed(
+                    "Pawfit credentials were rejected"
+                ) from None
+            except Exception:
+                self.logger.debug("Optional Pawfit activity refresh failed")
+                continue
+            self.logger.debug(
+                f"Received activity stats for tracker {tracker_id}: {stats}"
+            )
             self._activity[str(tracker_id)] = stats
 
+
 class PawfitDeviceTracker(TrackerEntity):
+    _attr_should_poll = False
+
     def __init__(self, tracker, coordinator):
         self._tracker = tracker
         self._coordinator = coordinator
@@ -337,10 +509,18 @@ class PawfitDeviceTracker(TrackerEntity):
     @property
     def available(self):
         """Return if entity is available."""
-        return self._coordinator.last_update_success and self._attr_latitude is not None and self._attr_longitude is not None
+        return (
+            self._coordinator.last_update_success
+            and self._attr_latitude is not None
+            and self._attr_longitude is not None
+        )
 
     def _fix_time(self):
-        data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
+        data = (
+            self._coordinator.data.get(str(self._tracker_id), {})
+            if self._coordinator.data
+            else {}
+        )
         return fix_time(data)
 
     def _is_stale(self) -> bool:
@@ -356,38 +536,40 @@ class PawfitDeviceTracker(TrackerEntity):
     def extra_state_attributes(self):
         """Fork change: when the tracker last reported its position."""
         fix = self._fix_time()
+        data_cached = (
+            (self._coordinator.data or {})
+            .get(str(self._tracker_id), {})
+            .get("data_cached", False)
+        )
         if fix is None:
-            return {"last_seen": None, "position_age_minutes": None, "stale": True}
+            return {
+                "last_seen": None,
+                "position_age_minutes": None,
+                "stale": True,
+                "data_cached": data_cached,
+            }
         return {
+            "data_cached": data_cached,
             "last_seen": dt_util.utc_from_timestamp(fix).isoformat(),
             "position_age_minutes": max(0, int((time.time() - fix) // 60)),
             "stale": time.time() - fix > STALE_AFTER_SECONDS,
         }
 
     def _update_attrs(self):
-        data = self._coordinator.data.get(str(self._tracker_id), {}) if self._coordinator.data else {}
-        self._attr_latitude = float(data.get("latitude")) if data.get("latitude") else None
-        self._attr_longitude = float(data.get("longitude")) if data.get("longitude") else None
-        self._attr_location_accuracy = float(data.get("accuracy")) if data.get("accuracy") else None
-        
+        data = (
+            self._coordinator.data.get(str(self._tracker_id), {})
+            if self._coordinator.data
+            else {}
+        )
+        self._attr_latitude = coordinate(data.get("latitude"), -90, 90)
+        self._attr_longitude = coordinate(data.get("longitude"), -180, 180)
+        self._attr_location_accuracy = coordinate(data.get("accuracy"), 0, 10000000)
+
         # Handle charging status. Battery percentage is exposed by the dedicated
         # battery sensor because device tracker battery_level is deprecated.
-        battery_raw = data.get("battery")
-        if battery_raw is not None:
-            battery_value = int(battery_raw)
-            model = data.get("_raw", {}).get("model")
-            if model == "TR2A":
-                # PawFit 2: value > 4 means charging
-                self._attr_charging = battery_value > 4
-            else:
-                # PawFit 3: negative value indicates charging
-                self._attr_charging = battery_value < 0
-        else:
-            self._attr_charging = None
-        
-        # Only log if there's an issue
-        if not (self._attr_latitude and self._attr_longitude) and data:
-            logging.warning(f"Tracker {self._tracker_id}: No location data available")
+        self._attr_charging = charging(
+            data.get("battery"), data.get("_raw", {}).get("model")
+        )
 
     async def async_update(self):
         await self._coordinator.async_request_refresh()
@@ -413,9 +595,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Pawfit device tracker entities from a config entry."""
     # Get the coordinator from hass.data (created in __init__.py)
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    
+
     entities = []
     for tracker in coordinator.trackers:
         entities.append(PawfitDeviceTracker(tracker, coordinator))
-    
+
     async_add_entities(entities)

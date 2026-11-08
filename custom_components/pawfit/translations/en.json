@@ -1,0 +1,34 @@
+{
+  "title": "Pawfit",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Pawfit",
+        "description": "Use a Pawfit account with access to your trackers. A separate shared account avoids disrupting your mobile app session.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect Pawfit",
+        "description": "Enter updated credentials for the same Pawfit account.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Pawfit rejected these credentials.",
+      "cannot_connect": "Cannot connect to Pawfit. Try again later.",
+      "invalid_response": "Pawfit returned an unexpected response. Check the integration logs for its error category; do not post credentials or raw responses.",
+      "wrong_account": "Sign in to the same account used for this integration."
+    },
+    "abort": {
+      "already_configured": "This Pawfit account is already configured.",
+      "single_instance_allowed": "Only one Pawfit account can be configured.",
+      "reauth_successful": "Pawfit credentials updated."
+    }
+  }
+}

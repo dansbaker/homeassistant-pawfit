@@ -1,20 +1,30 @@
 """Sensor platform for Pawfit integration."""
 
 import logging
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorDeviceClass,
+    SensorStateClass,
+)
 from homeassistant.const import EntityCategory
 from homeassistant.core import callback
 from datetime import datetime, timezone
 
 from .const import DOMAIN
+from .helpers import battery_level, mode_remaining
+from .device_tracker import fix_time
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class PawfitSensor(SensorEntity):
     """Base sensor class for Pawfit trackers."""
-    
-    def __init__(self, tracker, coordinator, kind, name, unit=None, icon=None, device_class=None):
+
+    _attr_should_poll = False
+
+    def __init__(
+        self, tracker, coordinator, kind, name, unit=None, icon=None, device_class=None
+    ):
         self._tracker = tracker
         self._coordinator = coordinator
         self._kind = kind  # e.g. 'battery', 'accuracy', 'signal', etc.
@@ -28,43 +38,37 @@ class PawfitSensor(SensorEntity):
         self._attr_device_info = {
             "identifiers": {(DOMAIN, str(self._tracker_id))},
             "name": f"{tracker['name']}'s PawFit Tracker",
-            "model": tracker.get("model", "Unknown")
+            "model": tracker.get("model", "Unknown"),
         }
 
     @property
     def native_value(self):
         """Return the sensor value."""
         if self._coordinator.data is None:
-            _LOGGER.debug(f"Sensor {self._attr_name} ({self._kind}): No coordinator data available")
+            _LOGGER.debug(
+                f"Sensor {self._attr_name} ({self._kind}): No coordinator data available"
+            )
             return None
-        
+
         loc = self._coordinator.data.get(str(self._tracker_id), {})
         value = loc.get(self._kind)
-        
+
         # Special handling for battery level
         if self._kind == "battery" and value is not None:
-            battery_raw = int(value)
-            model = loc.get("_raw", {}).get("model")
-            if model == "TR2A":
-                # PawFit 2: 1-3 scale (3=100%); value > 4 means charging
-                # Battery level cannot be determined while charging on PawFit 2
-                if battery_raw > 4:
-                    return None
-                return round((battery_raw / 3) * 100)
-            else:
-                # PawFit 3: negative value means charging, abs is the percentage
-                return abs(battery_raw)
-        
+            return battery_level(value, loc.get("_raw", {}).get("model"))
+
         # Add debug logging specifically for activity sensors
         if self._kind in ["steps_today", "calories_today", "active_time_today"]:
-            _LOGGER.debug(f"Activity sensor {self._attr_name} ({self._kind}): tracker_data_keys={list(loc.keys())}, value={value}")
-        
+            _LOGGER.debug(
+                f"Activity sensor {self._attr_name} ({self._kind}): tracker_data_keys={list(loc.keys())}, value={value}"
+            )
+
         return value
 
     @property
     def available(self):
         """Return if entity is available."""
-        return self._coordinator.last_update_success
+        return self._coordinator.tracker_available(self._tracker_id)
 
     async def async_added_to_hass(self):
         """When entity is added to hass."""
@@ -82,7 +86,9 @@ class PawfitSensor(SensorEntity):
 
 class PawfitTimestampSensor(SensorEntity):
     """Sensor for timestamp-based data like Last Time Seen."""
-    
+
+    _attr_should_poll = False
+
     def __init__(self, tracker, coordinator, kind, name, icon=None):
         self._tracker = tracker
         self._coordinator = coordinator
@@ -103,33 +109,22 @@ class PawfitTimestampSensor(SensorEntity):
         """Return the timestamp as a datetime object."""
         if self._coordinator.data is None:
             return None
-        
+
         data = self._coordinator.data.get(str(self._tracker_id), {})
-        
+
         if self._kind == "last_update":
-            # Get the timestamp from the raw API data
-            raw_data = data.get("_raw", {})
-            state_data = raw_data.get("state", {})
-            location_data = state_data.get("location", {})
-            utc_timestamp = location_data.get("utcDateTime")
-            
-            if utc_timestamp:
-                try:
-                    dt = datetime.fromtimestamp(utc_timestamp, timezone.utc)
-                    return dt
-                except (ValueError, TypeError) as e:
-                    _LOGGER.debug(f"Tracker {self._tracker_id} failed to convert timestamp {utc_timestamp}: {e}")
-                    return None
-            else:
-                _LOGGER.debug(f"Tracker {self._tracker_id}: No utcDateTime found in location data")
-        
-        _LOGGER.debug(f"Tracker {self._tracker_id}: Returning None for timestamp sensor")
+            stamp = fix_time(data)
+            return (
+                datetime.fromtimestamp(stamp, timezone.utc)
+                if stamp is not None
+                else None
+            )
         return None
 
     @property
     def available(self):
         """Return if entity is available."""
-        return self._coordinator.last_update_success
+        return self._coordinator.tracker_available(self._tracker_id)
 
     async def async_added_to_hass(self):
         """When entity is added to hass."""
@@ -147,7 +142,9 @@ class PawfitTimestampSensor(SensorEntity):
 
 class PawfitTimerSensor(SensorEntity):
     """Sensor for countdown timers (Find Mode and Light Mode)."""
-    
+
+    _attr_should_poll = False
+
     def __init__(self, tracker, coordinator, timer_type, name, icon=None):
         self._tracker = tracker
         self._coordinator = coordinator
@@ -167,63 +164,27 @@ class PawfitTimerSensor(SensorEntity):
 
     @property
     def native_value(self):
-        """Return the remaining time in seconds."""
-        if self._coordinator.data is None:
-            return 0
-        
-        data = self._coordinator.data.get(str(self._tracker_id), {})
-        timer_start = data.get(self._timer_type, 0)
-        
-        if timer_start and timer_start > 0:
-            try:
-                import time
-                # Timer values from API are in milliseconds, convert to seconds
-                timer_start_seconds = timer_start / 1000.0
-                current_time_seconds = time.time()
-                elapsed_seconds = current_time_seconds - timer_start_seconds
-                
-                # 10 minutes = 600 seconds
-                remaining_seconds = 600 - elapsed_seconds
-                
-                if remaining_seconds > 0:
-                    return int(remaining_seconds)
-                else:
-                    return 0
-            except (ValueError, TypeError):
-                _LOGGER.warning(f"Invalid timer value for {self._timer_type} on tracker {self._tracker_id}: {timer_start}")
-                return 0
-        
-        return 0
+        data = (self._coordinator.data or {}).get(str(self._tracker_id), {})
+        return int(mode_remaining(data.get(self._timer_type)))
 
     @property
     def extra_state_attributes(self):
-        """Return extra state attributes."""
         if self._coordinator.data is None:
             return {}
-        
-        data = self._coordinator.data.get(str(self._tracker_id), {})
-        timer_start = data.get(self._timer_type, 0)
-        
-        attributes = {}
-        if timer_start and timer_start > 0:
-            # Add formatted time remaining
-            remaining_seconds = self.native_value
-            if remaining_seconds > 0:
-                minutes = remaining_seconds // 60
-                seconds = remaining_seconds % 60
-                attributes["time_remaining_formatted"] = f"{minutes:02d}:{seconds:02d}"
-                attributes["timer_start_timestamp"] = timer_start
-            else:
-                attributes["time_remaining_formatted"] = "00:00"
-        else:
-            attributes["time_remaining_formatted"] = "00:00"
-        
+        remaining = self.native_value
+        attributes = {
+            "time_remaining_formatted": f"{remaining // 60:02d}:{remaining % 60:02d}"
+        }
+        if remaining > 0:
+            attributes["timer_start_timestamp"] = self._coordinator.data.get(
+                str(self._tracker_id), {}
+            ).get(self._timer_type)
         return attributes
 
     @property
     def available(self):
         """Return if entity is available."""
-        return self._coordinator.last_update_success
+        return self._coordinator.tracker_available(self._tracker_id)
 
     async def async_added_to_hass(self):
         """When entity is added to hass."""
@@ -266,7 +227,9 @@ class PawfitRequestCountSensor(SensorEntity):
         return {
             "counting_since": client.counting_since.isoformat(),
             "location_fetches_today": self._coordinator.fetches_today,
-            "last_request": client.last_request.isoformat() if client.last_request else None,
+            "last_request": client.last_request.isoformat()
+            if client.last_request
+            else None,
             "requests_since_start": client.request_count,
         }
 
@@ -288,17 +251,104 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     entities = [PawfitRequestCountSensor(coordinator, entry.entry_id)]
     for tracker in coordinator.trackers:
-        entities.append(PawfitSensor(tracker, coordinator, "battery", "Battery Level", unit="%", device_class=SensorDeviceClass.BATTERY))
-        entities.append(PawfitSensor(tracker, coordinator, "accuracy", "Location Accuracy", unit="m", icon="mdi:map-marker-radius"))
-        entities.append(PawfitSensor(tracker, coordinator, "signal", "Signal Strength", unit="dBm", icon="mdi:wifi-strength-3", device_class=SensorDeviceClass.SIGNAL_STRENGTH))
-        entities.append(PawfitTimestampSensor(tracker, coordinator, "last_update", "Last Time Seen", icon="mdi:clock-outline"))
-        entities.append(PawfitTimerSensor(tracker, coordinator, "find_timer", "Find Mode Timer", icon="mdi:crosshairs-gps"))
-        entities.append(PawfitTimerSensor(tracker, coordinator, "light_timer", "Light Mode Timer", icon="mdi:lightbulb-on"))
-        entities.append(PawfitTimerSensor(tracker, coordinator, "alarm_timer", "Alarm Mode Timer", icon="mdi:alarm-light"))
-        
+        entities.append(
+            PawfitSensor(
+                tracker,
+                coordinator,
+                "battery",
+                "Battery Level",
+                unit="%",
+                device_class=SensorDeviceClass.BATTERY,
+            )
+        )
+        entities.append(
+            PawfitSensor(
+                tracker,
+                coordinator,
+                "accuracy",
+                "Location Accuracy",
+                unit="m",
+                icon="mdi:map-marker-radius",
+            )
+        )
+        entities.append(
+            PawfitSensor(
+                tracker,
+                coordinator,
+                "signal",
+                "Signal Strength",
+                unit="dBm",
+                icon="mdi:wifi-strength-3",
+                device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+            )
+        )
+        entities.append(
+            PawfitTimestampSensor(
+                tracker,
+                coordinator,
+                "last_update",
+                "Last Time Seen",
+                icon="mdi:clock-outline",
+            )
+        )
+        entities.append(
+            PawfitTimerSensor(
+                tracker,
+                coordinator,
+                "find_timer",
+                "Find Mode Timer",
+                icon="mdi:crosshairs-gps",
+            )
+        )
+        entities.append(
+            PawfitTimerSensor(
+                tracker,
+                coordinator,
+                "light_timer",
+                "Light Mode Timer",
+                icon="mdi:lightbulb-on",
+            )
+        )
+        entities.append(
+            PawfitTimerSensor(
+                tracker,
+                coordinator,
+                "alarm_timer",
+                "Alarm Mode Timer",
+                icon="mdi:alarm-light",
+            )
+        )
+
         # Add daily activity sensors
-        entities.append(PawfitSensor(tracker, coordinator, "steps_today", "Steps Today", unit="steps", icon="mdi:walk"))
-        entities.append(PawfitSensor(tracker, coordinator, "calories_today", "Calories Today", unit="cal", icon="mdi:fire"))
-        entities.append(PawfitSensor(tracker, coordinator, "active_time_today", "Active Time Today", unit="h", icon="mdi:clock-time-eight"))
-    
+        entities.append(
+            PawfitSensor(
+                tracker,
+                coordinator,
+                "steps_today",
+                "Steps Today",
+                unit="steps",
+                icon="mdi:walk",
+            )
+        )
+        entities.append(
+            PawfitSensor(
+                tracker,
+                coordinator,
+                "calories_today",
+                "Calories Today",
+                unit="cal",
+                icon="mdi:fire",
+            )
+        )
+        entities.append(
+            PawfitSensor(
+                tracker,
+                coordinator,
+                "active_time_today",
+                "Active Time Today",
+                unit="h",
+                icon="mdi:clock-time-eight",
+            )
+        )
+
     async_add_entities(entities)

@@ -1,4 +1,5 @@
 """Custom exceptions for Pawfit integration."""
+
 from __future__ import annotations
 
 

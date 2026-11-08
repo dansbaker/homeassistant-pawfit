@@ -47,6 +47,16 @@ class FakePawfit:
 
     def __init__(self, aioclient_mock):
         self.calls = []
+        self.urls = []
+        self.login_number = 0
+        self.require_current_token = False
+        self.omit_trackers = set()
+        self.fail_start = set()
+        self.fail_stop = set()
+        self.fail_activity = False
+        self.coordinates = {}
+        self.reject_login = False
+        self.reject_locations = False
         self.fail_next_location_with_403 = False
         self.location_hangs = False  # True: location requests time out
         # Each tracker's last position fix (seconds since epoch): old to start with.
@@ -64,6 +74,7 @@ class FakePawfit:
     def _handler(self, endpoint):
         async def handler(method, url, data):
             self.calls.append((endpoint, time.monotonic(), time.time()))
+            self.urls.append((endpoint, str(url)))
             return self._respond(endpoint, method, url)
 
         return handler
@@ -73,7 +84,15 @@ class FakePawfit:
             return AiohttpClientMockResponse(method, url, json=payload)
 
         if endpoint == "login":
-            return ok({"success": True, "data": {"userId": "u1", "sessionId": "s1"}})
+            if self.reject_login:
+                return ok({"success": False})
+            self.login_number += 1
+            return ok(
+                {
+                    "success": True,
+                    "data": {"userId": "u1", "sessionId": f"s{self.login_number}"},
+                }
+            )
         if endpoint == "listpetinvitee":
             return ok({"success": True, "data": TRACKERS})
         if endpoint == "getlocationcaches":
@@ -81,30 +100,69 @@ class FakePawfit:
                 return AiohttpClientMockResponse(method, url, exc=TimeoutError())
             if self.fail_next_location_with_403:
                 self.fail_next_location_with_403 = False
-                return AiohttpClientMockResponse(method, url, status=HTTPStatus.FORBIDDEN, text="")
-            return ok({"success": True, "data": {
-                tid: {
-                    "state": {
-                        "location": {"latitude": 52.63, "longitude": 1.29, "accuracy": 12, "utcDateTime": self._fix(tid)},
-                        "power": 80,
-                        "signal": -70,
+                return AiohttpClientMockResponse(
+                    method, url, status=HTTPStatus.FORBIDDEN, text=""
+                )
+            if self.reject_locations or (
+                self.require_current_token
+                and not url.path.endswith(f"/s{self.login_number}")
+            ):
+                return AiohttpClientMockResponse(method, url, status=403, text="")
+            return ok(
+                {
+                    "success": True,
+                    "data": {
+                        tid: {
+                            "state": {
+                                "location": {
+                                    "latitude": 52.63,
+                                    "longitude": 1.29,
+                                    "accuracy": 12,
+                                    "utcDateTime": self._fix(tid),
+                                    **self.coordinates.get(tid, {}),
+                                },
+                                "power": 80,
+                                "signal": -70,
+                            },
+                            "model": "TR3",
+                            **self.timers[tid],
+                        }
+                        for tid in TRACKERS
+                        if tid not in self.omit_trackers
                     },
-                    "model": "TR3",
-                    **self.timers[tid],
                 }
-                for tid in TRACKERS
-            }})
+            )
         if endpoint == "getactivitystatzip":
-            body = {"data": {"activities": [{"hourlyStats": [{"calorie": 1.5, "active": 0.25, "pace": 120}]}]}}
-            packed = base64.urlsafe_b64encode(zlib.compress(json.dumps(body).encode())).decode().rstrip("=")
+            if self.fail_activity:
+                return AiohttpClientMockResponse(
+                    method, url, status=503, text="private upstream body"
+                )
+            body = {
+                "data": {
+                    "activities": [
+                        {"hourlyStats": [{"calorie": 1.5, "active": 0.25, "pace": 120}]}
+                    ]
+                }
+            }
+            packed = (
+                base64.urlsafe_b64encode(zlib.compress(json.dumps(body).encode()))
+                .decode()
+                .rstrip("=")
+            )
             return AiohttpClientMockResponse(method, url, text=packed)
         if endpoint in ("starttracking", "stoptracking"):
             tid = url.query["tracker"]
+            if (endpoint == "starttracking" and tid in self.fail_start) or (
+                endpoint == "stoptracking" and tid in self.fail_stop
+            ):
+                return ok({"success": False})
             if url.query.get("gps") == "1":
                 self.finding[tid] = endpoint == "starttracking"
             for param, field in MODE_FIELDS.items():
                 if url.query.get(param) == "1":
-                    self.timers[tid][field] = int(time.time() * 1000) if endpoint == "starttracking" else 0
+                    self.timers[tid][field] = (
+                        int(time.time() * 1000) if endpoint == "starttracking" else 0
+                    )
             return ok({"success": True})
         raise AssertionError(endpoint)
 
@@ -139,7 +197,12 @@ async def setup_entry(hass, pawfit):
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Pawfit Account",
-        data={"username": "spare@example.com", "password": "pw", "userId": "u1", "sessionId": "s1"},
+        data={
+            "username": "spare@example.com",
+            "password": "pw",
+            "userId": "u1",
+            "sessionId": "s1",
+        },
     )
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)

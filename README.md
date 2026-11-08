@@ -1,170 +1,80 @@
+# Pawfit for Home Assistant
 
-# Pawfit Home Assistant I- 📍 **GPS Device Tracker** - Track your pets' real-time location on the Home Assistant map
-- 🔋 **Battery Monitoring** - Monitor battery level and charging status
-- 📶 **Signal Strength** - View GPS signal quality
-- 🎯 **Location Accuracy** - See GPS accuracy in meters
-- 🕐 **Last Seen** - Track when location was last updated
-- 🏃 **Fitness Tracking** - Monitor daily steps, calories burned, and active time
-- 📈 **Activity Stats** - View today's fitness data with real-time updates
-- 🔍 **Find Mode** - Activate GPS tracking for 10 minutes with button and status sensor
-- 💡 **Light Mode** - Turn on tracker LED light for 10 minutes with button and status sensor
-- 🚨 **Alarm Mode** - Activate tracker alarm for 10 minutes with button and status sensor
-- ⏱️ **Timer Sensors** - View countdown timers for active modes
-- ⚡ **Rate-limited polling** - One location fetch a minute, enforced in code, with a request counter (see [Polling](#polling-this-fork))
-- 🐕 **Multiple Pets** - Support for multiple trackers under one account
-- 🏠 **Home Assistant Integration** - Use in automations, scripts, and dashboards
+A community integration for Pawfit pet trackers: locations, battery and charging, signal, daily activity, and Find, Light and Alarm controls. This integration is unofficial and is not supported by Pawfit.
 
-> **Fork of [dansbaker/homeassistant-pawfit](https://github.com/dansbaker/homeassistant-pawfit) v0.4.2** that polls Pawfit at most once a minute. See [Polling](#polling-this-fork). Install from HACS as a custom repository: `https://github.com/fullstackfool/homeassistant-pawfit`.
+Thanks to **[@fullstackfool](https://github.com/fullstackfool/homeassistant-pawfit)** for contributing rate-limited polling, a shared HTTP session, request counting, an outage grace period, Locate and stale-position information through their fork. Their original commits are preserved in this repository. Community fixes and contributions are welcome.
 
-**⚠️ UNOFFICIAL INTEGRATION - NOT SUPPORTED BY PAWFIT ⚠️**
+## Use a separate Pawfit account
 
-A community-built Home Assistant integration for Pawfit pet trackers. Track multiple dogs/pets and integrate their location data into your smart home automations.
+**Do not use your main Pawfit account.** Pawfit sessions can displace the mobile app's login. Create another account, share your pets with it, sign into that account in the Pawfit app to accept the invitations, then return the app to your main account. Use the separate account's credentials in Home Assistant.
 
-## ⚠️ CRITICAL SETUP REQUIREMENT ⚠️
+## Install
 
-**🚨 DO NOT USE YOUR MAIN PAWFIT ACCOUNT WITH THIS INTEGRATION! 🚨**
+Home Assistant **2026.9 or newer** is required. Automated tests currently cover 2026.9.4 and 2026.10.4; see [development](#development) for the exact environments.
 
-You **MUST** create a separate Pawfit account for this integration. If you use your main account, you will be repeatedly logged out of the mobile app whenever the integration updates, potentially causing you to lose track of your pet in an emergency!
+In HACS, add `https://github.com/dansbaker/homeassistant-pawfit` as a custom **Integration** repository, download Pawfit and restart Home Assistant. Then add **Pawfit Pet Tracker** under **Settings → Devices & services → Add integration**.
 
-### Required Setup Steps:
+For manual installation, copy `custom_components/pawfit` from this repository into your Home Assistant configuration's `custom_components` directory. Alternatively, extract the release's `pawfit.zip` **into `custom_components/pawfit/`**. Restart Home Assistant and add the integration.
 
-1. **Create a NEW Pawfit account** with a different email address
-2. **Share your pets** from your main account to this new account
-3. **Log into the NEW account** on your mobile app
-4. **Accept the pet sharing invitation** in the new account
-5. **Log back into your MAIN account** on your mobile app
-6. **Use the NEW account credentials** when setting up this integration in Home Assistant
+If credentials expire, use Home Assistant's reauthentication prompt. Connection failures and unexpected API responses are reported separately from rejected credentials. Only one Pawfit account can be configured.
 
-This ensures your main mobile app stays logged in while the integration uses the secondary account.
+## Entities and controls
 
-## Features
+Each tracker provides:
 
-- 📍 **GPS Device Tracker** - Track your pets' real-time location on the Home Assistant map
-- 🔋 **Battery Monitoring** - Monitor battery level and charging status
-- 📶 **Signal Strength** - View GPS signal quality
-- 🎯 **Location Accuracy** - See GPS accuracy in meters
-- 🕐 **Last Seen** - Track when location was last updated
-- � **Find Mode** - Activate GPS tracking for 10 minutes with button and status sensor
-- 💡 **Light Mode** - Turn on tracker LED light for 10 minutes with button and status sensor
-- 🚨 **Alarm Mode** - Activate tracker alarm for 10 minutes with button and status sensor
-- ⏱️ **Timer Sensors** - View countdown timers for active modes
-- �🐕 **Multiple Pets** - Support for multiple trackers under one account
-- 🏠 **Home Assistant Integration** - Use in automations, scripts, and dashboards
+- A GPS device tracker with accuracy, last-seen time, position age, `stale` and `data_cached` attributes.
+- Battery percentage, charging status, signal strength and last-seen sensors.
+- Daily steps, calories and active time (hours).
+- Find, Light and Alarm toggle buttons, active-state binary sensors and remaining-time sensors.
 
-## Installation
+Modes have a ten-minute timer reported by Pawfit. Press the corresponding button again to stop a mode early. Local state changes only after the API acknowledges the command; this acknowledges delivery to Pawfit, not physical operation of the tracker. Timers update with the polling cycle rather than every second.
 
-### HACS (Recommended)
+The account also provides a **Locate** button, a **Locating** binary sensor and an API request counter. Entity IDs depend on Home Assistant's naming and existing registry; existing tracker and mode unique IDs are preserved on upgrade.
 
-1. Open HACS in Home Assistant
-2. Go to "Integrations"
-3. Click the three dots menu (⋮) in the top right corner
-4. Select "Custom repositories"
-5. Add repository URL: `https://github.com/dansbaker/homeassistant-pawfit`
-6. Select category: "Integration"
-7. Click "Add"
-8. Search for "Pawfit" in HACS integrations
-9. Click "Download"
-10. Restart Home Assistant
+### Locate
 
-### Manual Installation
+Locate temporarily enables Find for each tracker and waits for a **new** position relative to its starting position. It stops the Find modes it started when a new fix arrives, or after three minutes. Trackers already in Find mode remain under your control. A manual Find press during Locate takes ownership of that tracker's mode.
 
-1. Download this repository
-2. Copy the `custom_components/pawfit` folder to your Home Assistant `custom_components` directory
-3. Restart Home Assistant
+Positions are still checked at most once a minute. A successful Locate means Pawfit returned a newer position; it does not independently verify GPS accuracy or the pet's physical location.
 
-## Setup
+The Locating sensor exposes `waiting_for`, `last_result` and `cleanup_pending`. Failed starts and failed stop acknowledgements are reported. Failed stops receive at most three automatic attempts; if cleanup remains pending, inspect the Pawfit app or use the Find toggle to switch it off before starting Locate again. Unloading the integration attempts to stop only Find modes owned by Locate.
 
-1. Go to **Settings** → **Devices & Services** → **Add Integration**
-2. Search for "Pawfit"
-3. Enter your **NEW** Pawfit account credentials (not your main account!)
-4. Complete the setup
+### Polling, outages and stale positions
 
-## Available Entities
+- Location, battery, signal and mode timers use **one account request per minute**, with a hard minimum spacing of 55 seconds. Extra refresh requests do not bypass this limit.
+- Activity uses **one request per tracker every 15 minutes**, and refreshes after midnight in Home Assistant's timezone.
+- Button presses add command requests; activating a mode does not start rapid polling.
+- During a transient outage, recent readings remain available for up to **15 minutes**, marked `data_cached: true`. Missing trackers in partial responses expire independently. Authentication failures request reauthentication immediately.
+- Cached readings are last-known data. Inspect **Last Time Seen**, `position_age_minutes` and `stale`; an available map marker does not mean a tracker is online. Positions older than 15 minutes have a question-mark icon.
+- Failed activity requests retain the last valid same-day totals rather than replacing them with zero. A new day's totals remain unknown until fetched successfully.
 
-For each tracker, the integration provides:
+With two trackers, the scheduled requests total about **1,632 per day**, excluding login, retries and commands. The diagnostic counter includes every HTTP request, including retries and commands; its count starts at integration setup and resets at local midnight.
 
-### Device Tracker
-- GPS location with accuracy and battery level
+## Troubleshooting and contributions
 
-### Sensors
-- Battery level (%)
-- Signal strength
-- Location accuracy (meters)
-- Last seen timestamp
-- Steps today (daily step count)
-- Calories today (daily calories burned)
-- Active time today (daily active minutes)
-- Find mode timer (countdown in seconds)
-- Light mode timer (countdown in seconds)
-- Alarm mode timer (countdown in seconds)
+Report problems in [GitHub issues](https://github.com/dansbaker/homeassistant-pawfit/issues). Include your Home Assistant version, integration version, tracker model, expected behaviour, last-seen time and whether data is marked stale/cached. For Locate, include `last_result` and `cleanup_pending`. Remove account details, tokens, tracker identifiers and precise coordinates from anything you share. Do not post passwords or raw authenticated API URLs.
 
-### Binary Sensors
-- Charging status
-- Find mode active (10-minute duration)
-- Light mode active (10-minute duration)
-- Alarm mode active (10-minute duration)
+The integration uses a reverse-engineered cloud API, which may change. Hardware behaviour still needs testing on different tracker models. Please use the Pawfit app for time-critical tracking.
 
-### Buttons
-- Find mode toggle (activate/deactivate GPS tracking)
-- Light mode toggle (activate/deactivate LED light)
-- Alarm mode toggle (activate/deactivate alarm sound)
+See [0.5.0 release notes](docs/releases/0.5.0.md) and the [review record](docs/community-review.md) for the imported work, fixes and remaining limitations.
 
-Each mode runs for exactly 10 minutes when activated. You can deactivate early by pressing the button again.
+## Development
 
-## Fitness Tracking
+Use Python 3.14 and an isolated environment:
 
-The integration provides comprehensive daily activity monitoring for your pets:
+```sh
+python3.14 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements_test.txt
+python -m pytest --cov=custom_components.pawfit --cov-branch --cov-report=term-missing --cov-fail-under=95
+ruff check custom_components tests
+ruff format --check custom_components tests
+```
 
-- **Steps Today**: Total steps taken since midnight
-- **Calories Today**: Estimated calories burned based on activity
-- **Active Time Today**: Minutes of active movement throughout the day
+`requirements_test.txt` pins the HA 2026.9.4 test harness. `requirements_test_2026_10.txt` pins the HA 2026.10.4 harness; run it in a separate environment. CI runs both and enforces **95% combined statement/branch coverage**. Tests use synthetic API responses and fake time; they never log into a real account or command real trackers.
 
-Fitness data is updated automatically and resets at midnight each day. The integration uses the Pawfit API's activity statistics to provide accurate, real-time fitness metrics.
-
-## Polling (this fork)
-
-This fork limits how often it talks to Pawfit:
-
-- **Location, battery, signal and mode timers**: one request a minute for all trackers together. Requests for an extra refresh (`homeassistant.update_entity`, a button press) are ignored until a minute has passed since the last fetch, and no two fetches are ever less than 55 seconds apart, whatever triggers them.
-- **Daily activity** (steps, calories, active time): one request per tracker every 15 minutes, and again just after midnight.
-- **Find / Light / Alarm buttons**: one request per press. The mode shows as on or off at once from a local timer; there is no 1-second polling.
-- **Pawfit not answering**: if a fetch times out or fails, the last known positions and readings stay up (the cats don't vanish from maps) for up to 15 minutes after the last good fetch; after that the entities go unavailable. Upstream made them unavailable on the first failed fetch.
-- **Locate** (`button.pawfit_locate`): gets a fresh position from every tracker. Pawfit has no one-off "locate" call, so it turns Find mode on and, as each tracker reports a position newer than the press, turns Find mode off again for it (to save battery). Trackers already in Find mode are left alone. Gives up after 3 minutes. `binary_sensor.pawfit_locating` is on while it waits (icon `mdi:loading`), with `waiting_for` and `last_result` attributes. Positions are still fetched once a minute, so a press costs only the Find on/off requests.
-- **Stale positions**: each device tracker has `last_seen` (when the tracker last reported its position), `position_age_minutes` and `stale` (over 15 minutes old) attributes, and its icon changes to `mdi:map-marker-question` while stale.
-- **Counter**: `sensor.pawfit_api_requests_today` counts every request made to Pawfit (fetches, logins and commands) since midnight or Home Assistant's start. Its `location_fetches_today` attribute counts the location fetches.
-
-With two trackers that's about 1,600 requests a day. Upstream made about 5,800 a day, plus about 2,400 for each Find, Light or Alarm press.
-
-`tests/` checks this against a fake Pawfit API (`pip install pytest-homeassistant-custom-component`, then `pytest`).
-
-## Beta Status
-
-🚧 **This is BETA software with expanding features.**
-
-Current limitations:
-- Limited tracker commands (Find, Light, and Alarm modes only)
-- Basic location and status information
-- No advanced Pawfit features (geofences, etc.)
-
-Recent additions:
-- ✅ Daily fitness tracking (steps, calories, active time)
-- ✅ Smart polling intervals for responsive mode tracking
-- ✅ Real-time activity statistics
-
-## Support & Feature Requests
-
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/dansbaker/homeassistant-pawfit/issues)
-- 💡 **Feature Requests**: [GitHub Issues](https://github.com/dansbaker/homeassistant-pawfit/issues)
-- ❓ **Questions**: [GitHub Discussions](https://github.com/dansbaker/homeassistant-pawfit/discussions)
-
-## Disclaimer
-
-This integration is:
-- **Unofficial** and not affiliated with Pawfit
-- **Community-developed** and maintained
-- **Based on reverse engineering** of the Pawfit mobile app API
-- **Use at your own risk** - the API may change without notice
+Coverage includes polling limits, outage/recovery, partial responses, reauthentication, malformed responses, command failures, Locate ownership and cleanup, setup/unload and registry stability. These tests do not prove physical tracker behaviour or compatibility with untested Home Assistant versions.
 
 ## License
 
-[Apache 2.0](LICENSE)
+Apache 2.0

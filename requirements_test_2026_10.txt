@@ -1,0 +1,4 @@
+# Python 3.14; second Home Assistant compatibility environment.
+pytest-homeassistant-custom-component==0.13.375
+pytest-cov==7.1.0
+ruff==0.14.3
