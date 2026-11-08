@@ -10,9 +10,12 @@
 - 💡 **Light Mode** - Turn on tracker LED light for 10 minutes with button and status sensor
 - 🚨 **Alarm Mode** - Activate tracker alarm for 10 minutes with button and status sensor
 - ⏱️ **Timer Sensors** - View countdown timers for active modes
-- ⚡ **Smart Polling** - Automatic 1-second updates when modes are active, 60-second otherwise
+- ⚡ **Rate-limited polling** - One location fetch a minute, enforced in code, with a request counter (see [Polling](#polling-this-fork))
 - 🐕 **Multiple Pets** - Support for multiple trackers under one account
 - 🏠 **Home Assistant Integration** - Use in automations, scripts, and dashboards
+
+> **Fork of [dansbaker/homeassistant-pawfit](https://github.com/dansbaker/homeassistant-pawfit) v0.4.2** that polls Pawfit at most once a minute. See [Polling](#polling-this-fork). Install from HACS as a custom repository: `https://github.com/fullstackfool/homeassistant-pawfit`.
+
 **⚠️ UNOFFICIAL INTEGRATION - NOT SUPPORTED BY PAWFIT ⚠️**
 
 A community-built Home Assistant integration for Pawfit pet trackers. Track multiple dogs/pets and integrate their location data into your smart home automations.
@@ -118,15 +121,21 @@ The integration provides comprehensive daily activity monitoring for your pets:
 
 Fitness data is updated automatically and resets at midnight each day. The integration uses the Pawfit API's activity statistics to provide accurate, real-time fitness metrics.
 
-## Smart Polling
+## Polling (this fork)
 
-The integration features intelligent update intervals to balance responsiveness with API efficiency:
+This fork limits how often it talks to Pawfit:
 
-- **Normal Mode**: Updates every 60 seconds for location, battery, and fitness data
-- **Active Mode**: Switches to 1-second updates when any mode (Find, Light, or Alarm) is activated
-- **Automatic Switching**: Immediately returns to 60-second updates when all modes are deactivated
+- **Location, battery, signal and mode timers**: one request a minute for all trackers together. Requests for an extra refresh (`homeassistant.update_entity`, a button press) are ignored until a minute has passed since the last fetch, and no two fetches are ever less than 55 seconds apart, whatever triggers them.
+- **Daily activity** (steps, calories, active time): one request per tracker every 15 minutes, and again just after midnight.
+- **Find / Light / Alarm buttons**: one request per press. The mode shows as on or off at once from a local timer; there is no 1-second polling.
+- **Pawfit not answering**: if a fetch times out or fails, the last known positions and readings stay up (the cats don't vanish from maps) for up to 15 minutes after the last good fetch; after that the entities go unavailable. Upstream made them unavailable on the first failed fetch.
+- **Locate** (`button.pawfit_locate`): gets a fresh position from every tracker. Pawfit has no one-off "locate" call, so it turns Find mode on and, as each tracker reports a position newer than the press, turns Find mode off again for it (to save battery). Trackers already in Find mode are left alone. Gives up after 3 minutes. `binary_sensor.pawfit_locating` is on while it waits (icon `mdi:loading`), with `waiting_for` and `last_result` attributes. Positions are still fetched once a minute, so a press costs only the Find on/off requests.
+- **Stale positions**: each device tracker has `last_seen` (when the tracker last reported its position), `position_age_minutes` and `stale` (over 15 minutes old) attributes, and its icon changes to `mdi:map-marker-question` while stale.
+- **Counter**: `sensor.pawfit_api_requests_today` counts every request made to Pawfit (fetches, logins and commands) since midnight or Home Assistant's start. Its `location_fetches_today` attribute counts the location fetches.
 
-This ensures you get real-time updates during active tracking while minimizing API calls during normal operation.
+With two trackers that's about 1,600 requests a day. Upstream made about 5,800 a day, plus about 2,400 for each Find, Light or Alarm press.
+
+`tests/` checks this against a fake Pawfit API (`pip install pytest-homeassistant-custom-component`, then `pytest`).
 
 ## Beta Status
 

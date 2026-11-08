@@ -1,6 +1,7 @@
 """Button platform for Pawfit integration."""
 
 import logging
+import time
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
@@ -41,7 +42,6 @@ class PawfitFindModeButton(ButtonEntity):
             
             if find_timer and find_timer > 0:
                 # Check if within 10 minutes (active)
-                import time
                 try:
                     # Timer values from API are in milliseconds, convert to seconds
                     timer_start_seconds = find_timer / 1000.0
@@ -54,8 +54,8 @@ class PawfitFindModeButton(ButtonEntity):
                         success = await self._coordinator.client.async_stop_find_mode(str(self._tracker_id))
                         if success:
                             _LOGGER.info(f"Successfully stopped find mode for tracker {self._tracker_id}")
-                            # Trigger immediate coordinator update
-                            await self._coordinator.async_request_refresh()
+                            # Show the mode as off straight away; no extra fetch (fork change)
+                            self._coordinator.async_set_mode_timer(self._tracker_id, "find_timer", 0)
                         else:
                             raise HomeAssistantError(f"Failed to stop find mode for tracker {self._tracker_id}")
                     else:
@@ -63,12 +63,8 @@ class PawfitFindModeButton(ButtonEntity):
                         success = await self._coordinator.client.async_start_find_mode(str(self._tracker_id))
                         if success:
                             _LOGGER.info(f"Successfully started find mode for tracker {self._tracker_id}")
-                            # Immediately switch to fast polling and trigger update
-                            _LOGGER.debug(f"Before async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                            await self._coordinator.async_set_fast_polling()
-                            _LOGGER.debug(f"After async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                            await self._coordinator.async_request_refresh()
-                            _LOGGER.debug("Requested immediate refresh after starting find mode")
+                            # Show the mode as on straight away; no extra fetch (fork change)
+                            self._coordinator.async_set_mode_timer(self._tracker_id, "find_timer", int(time.time() * 1000))
                         else:
                             raise HomeAssistantError(f"Failed to start find mode for tracker {self._tracker_id}")
                 except (ValueError, TypeError):
@@ -76,24 +72,16 @@ class PawfitFindModeButton(ButtonEntity):
                     success = await self._coordinator.client.async_start_find_mode(str(self._tracker_id))
                     if success:
                         _LOGGER.info(f"Successfully started find mode for tracker {self._tracker_id}")
-                        # Immediately switch to fast polling and trigger update
-                        _LOGGER.debug(f"Before async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                        await self._coordinator.async_set_fast_polling()
-                        _LOGGER.debug(f"After async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                        await self._coordinator.async_request_refresh()
-                        _LOGGER.debug("Requested immediate refresh after starting find mode")
+                        # Show the mode as on straight away; no extra fetch (fork change)
+                        self._coordinator.async_set_mode_timer(self._tracker_id, "find_timer", int(time.time() * 1000))
                     else:
                         raise HomeAssistantError(f"Failed to start find mode for tracker {self._tracker_id}")
             else:                        # Find mode is not active, so start it
                         success = await self._coordinator.client.async_start_find_mode(str(self._tracker_id))
                         if success:
                             _LOGGER.info(f"Successfully started find mode for tracker {self._tracker_id}")
-                            # Immediately switch to fast polling and trigger update
-                            _LOGGER.debug(f"Before async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                            await self._coordinator.async_set_fast_polling()
-                            _LOGGER.debug(f"After async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                            await self._coordinator.async_request_refresh()
-                            _LOGGER.debug("Requested immediate refresh after starting find mode")
+                            # Show the mode as on straight away; no extra fetch (fork change)
+                            self._coordinator.async_set_mode_timer(self._tracker_id, "find_timer", int(time.time() * 1000))
                         else:
                             raise HomeAssistantError(f"Failed to start find mode for tracker {self._tracker_id}")
         except Exception as e:
@@ -145,7 +133,6 @@ class PawfitLightModeButton(ButtonEntity):
             
             if light_timer and light_timer > 0:
                 # Check if within 10 minutes (active)
-                import time
                 try:
                     # Timer values from API are in milliseconds, convert to seconds
                     timer_start_seconds = light_timer / 1000.0
@@ -158,8 +145,8 @@ class PawfitLightModeButton(ButtonEntity):
                         success = await self._coordinator.client.async_stop_light_mode(str(self._tracker_id))
                         if success:
                             _LOGGER.info(f"Successfully stopped light mode for tracker {self._tracker_id}")
-                            # Trigger immediate coordinator update
-                            await self._coordinator.async_request_refresh()
+                            # Show the mode as off straight away; no extra fetch (fork change)
+                            self._coordinator.async_set_mode_timer(self._tracker_id, "light_timer", 0)
                         else:
                             raise HomeAssistantError(f"Failed to stop light mode for tracker {self._tracker_id}")
                     else:
@@ -167,12 +154,8 @@ class PawfitLightModeButton(ButtonEntity):
                         success = await self._coordinator.client.async_start_light_mode(str(self._tracker_id))
                         if success:
                             _LOGGER.info(f"Successfully started light mode for tracker {self._tracker_id}")
-                            # Immediately switch to fast polling and trigger update
-                            _LOGGER.debug(f"Before async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                            await self._coordinator.async_set_fast_polling()
-                            _LOGGER.debug(f"After async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                            await self._coordinator.async_request_refresh()
-                            _LOGGER.debug("Requested immediate refresh after starting light mode")
+                            # Show the mode as on straight away; no extra fetch (fork change)
+                            self._coordinator.async_set_mode_timer(self._tracker_id, "light_timer", int(time.time() * 1000))
                         else:
                             raise HomeAssistantError(f"Failed to start light mode for tracker {self._tracker_id}")
                 except (ValueError, TypeError):
@@ -180,12 +163,8 @@ class PawfitLightModeButton(ButtonEntity):
                     success = await self._coordinator.client.async_start_light_mode(str(self._tracker_id))
                     if success:
                         _LOGGER.info(f"Successfully started light mode for tracker {self._tracker_id}")
-                        # Immediately switch to fast polling and trigger update
-                        _LOGGER.debug(f"Before async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                        await self._coordinator.async_set_fast_polling()
-                        _LOGGER.debug(f"After async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                        await self._coordinator.async_request_refresh()
-                        _LOGGER.debug("Requested immediate refresh after starting light mode")
+                        # Show the mode as on straight away; no extra fetch (fork change)
+                        self._coordinator.async_set_mode_timer(self._tracker_id, "light_timer", int(time.time() * 1000))
                     else:
                         raise HomeAssistantError(f"Failed to start light mode for tracker {self._tracker_id}")
             else:
@@ -193,12 +172,8 @@ class PawfitLightModeButton(ButtonEntity):
                 success = await self._coordinator.client.async_start_light_mode(str(self._tracker_id))
                 if success:
                     _LOGGER.info(f"Successfully started light mode for tracker {self._tracker_id}")
-                    # Immediately switch to fast polling and trigger update
-                    _LOGGER.debug(f"Before async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                    await self._coordinator.async_set_fast_polling()
-                    _LOGGER.debug(f"After async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                    await self._coordinator.async_request_refresh()
-                    _LOGGER.debug("Requested immediate refresh after starting light mode")
+                    # Show the mode as on straight away; no extra fetch (fork change)
+                    self._coordinator.async_set_mode_timer(self._tracker_id, "light_timer", int(time.time() * 1000))
                 else:
                     raise HomeAssistantError(f"Failed to start light mode for tracker {self._tracker_id}")
         except Exception as e:
@@ -250,7 +225,6 @@ class PawfitAlarmModeButton(ButtonEntity):
             
             if alarm_timer and alarm_timer > 0:
                 # Check if within 10 minutes (active)
-                import time
                 try:
                     # Timer values from API are in milliseconds, convert to seconds
                     timer_start_seconds = alarm_timer / 1000.0
@@ -263,8 +237,8 @@ class PawfitAlarmModeButton(ButtonEntity):
                         success = await self._coordinator.client.async_stop_alarm_mode(str(self._tracker_id))
                         if success:
                             _LOGGER.info(f"Successfully stopped alarm mode for tracker {self._tracker_id}")
-                            # Trigger immediate coordinator update
-                            await self._coordinator.async_request_refresh()
+                            # Show the mode as off straight away; no extra fetch (fork change)
+                            self._coordinator.async_set_mode_timer(self._tracker_id, "alarm_timer", 0)
                         else:
                             raise HomeAssistantError(f"Failed to stop alarm mode for tracker {self._tracker_id}")
                     else:
@@ -272,12 +246,8 @@ class PawfitAlarmModeButton(ButtonEntity):
                         success = await self._coordinator.client.async_start_alarm_mode(str(self._tracker_id))
                         if success:
                             _LOGGER.info(f"Successfully started alarm mode for tracker {self._tracker_id}")
-                            # Immediately switch to fast polling and trigger update
-                            _LOGGER.debug(f"Before async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                            await self._coordinator.async_set_fast_polling()
-                            _LOGGER.debug(f"After async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                            await self._coordinator.async_request_refresh()
-                            _LOGGER.debug("Requested immediate refresh after starting alarm mode")
+                            # Show the mode as on straight away; no extra fetch (fork change)
+                            self._coordinator.async_set_mode_timer(self._tracker_id, "alarm_timer", int(time.time() * 1000))
                         else:
                             raise HomeAssistantError(f"Failed to start alarm mode for tracker {self._tracker_id}")
                 except (ValueError, TypeError):
@@ -285,12 +255,8 @@ class PawfitAlarmModeButton(ButtonEntity):
                     success = await self._coordinator.client.async_start_alarm_mode(str(self._tracker_id))
                     if success:
                         _LOGGER.info(f"Successfully started alarm mode for tracker {self._tracker_id}")
-                        # Immediately switch to fast polling and trigger update
-                        _LOGGER.debug(f"Before async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                        await self._coordinator.async_set_fast_polling()
-                        _LOGGER.debug(f"After async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                        await self._coordinator.async_request_refresh()
-                        _LOGGER.debug("Requested immediate refresh after starting alarm mode")
+                        # Show the mode as on straight away; no extra fetch (fork change)
+                        self._coordinator.async_set_mode_timer(self._tracker_id, "alarm_timer", int(time.time() * 1000))
                     else:
                         raise HomeAssistantError(f"Failed to start alarm mode for tracker {self._tracker_id}")
             else:
@@ -298,12 +264,8 @@ class PawfitAlarmModeButton(ButtonEntity):
                 success = await self._coordinator.client.async_start_alarm_mode(str(self._tracker_id))
                 if success:
                     _LOGGER.info(f"Successfully started alarm mode for tracker {self._tracker_id}")
-                    # Immediately switch to fast polling and trigger update
-                    _LOGGER.debug(f"Before async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                    await self._coordinator.async_set_fast_polling()
-                    _LOGGER.debug(f"After async_set_fast_polling: interval = {self._coordinator.update_interval}")
-                    await self._coordinator.async_request_refresh()
-                    _LOGGER.debug("Requested immediate refresh after starting alarm mode")
+                    # Show the mode as on straight away; no extra fetch (fork change)
+                    self._coordinator.async_set_mode_timer(self._tracker_id, "alarm_timer", int(time.time() * 1000))
                 else:
                     raise HomeAssistantError(f"Failed to start alarm mode for tracker {self._tracker_id}")
         except Exception as e:
@@ -324,12 +286,34 @@ class PawfitAlarmModeButton(ButtonEntity):
         self.async_write_ha_state()
 
 
+class PawfitLocateButton(ButtonEntity):
+    """Get a fresh position from every tracker now (fork change).
+
+    Turns Find mode on, then off again for each tracker once it reports.
+    binary_sensor.pawfit_locating is on while it waits.
+    """
+
+    _attr_icon = "mdi:crosshairs-gps"
+
+    def __init__(self, coordinator, entry_id):
+        self._coordinator = coordinator
+        self._attr_name = "PawFit Locate"
+        self._attr_unique_id = f"{entry_id}_locate"
+
+    @property
+    def available(self):
+        return self._coordinator.last_update_success
+
+    async def async_press(self) -> None:
+        await self._coordinator.async_locate()
+
+
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Pawfit button entities from a config entry."""
     # Get the coordinator from hass.data (created in __init__.py)
     coordinator = hass.data[DOMAIN][entry.entry_id]
     
-    entities = []
+    entities = [PawfitLocateButton(coordinator, entry.entry_id)]
     for tracker in coordinator.trackers:
         entities.append(PawfitFindModeButton(tracker, coordinator))
         entities.append(PawfitLightModeButton(tracker, coordinator))

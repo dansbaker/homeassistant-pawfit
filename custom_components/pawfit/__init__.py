@@ -1,8 +1,9 @@
 """The Pawfit integration."""
 
-import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from .pawfit_api import PawfitApiClient
 from .device_tracker import PawfitDataUpdateCoordinator
@@ -11,12 +12,14 @@ from .const import DOMAIN
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pawfit from a config entry."""
-    # Create the API client
-    session = aiohttp.ClientSession()
+    # Create the API client. Fork change: HA's shared HTTP session (upstream
+    # opened a new one on every setup and never closed it), and HA's clock
+    # for the daily request count.
     client = PawfitApiClient(
         entry.data["username"],
         entry.data["password"],
-        session
+        async_get_clientsession(hass),
+        now_fn=dt_util.now,
     )
     
     # Get trackers and create coordinator

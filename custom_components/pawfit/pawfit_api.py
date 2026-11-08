@@ -3,7 +3,10 @@ import aiohttp
 import hashlib
 import logging
 import time
-from .const import BASE_URL, USER_AGENT
+from datetime import datetime
+from .const import BASE_URL, USER_AGENT, REQUEST_TIMEOUT_SECONDS
+
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
 
 # Secret key extracted from Pawfit Android APK v3.3.0
 # Located in com.latsen.pawfit.common.base.Const.g()
@@ -43,12 +46,31 @@ def calculate_api_sign(
 
 
 class PawfitApiClient:
-    def __init__(self, username: str, password: str, session: aiohttp.ClientSession):
+    def __init__(self, username: str, password: str, session: aiohttp.ClientSession, now_fn=None):
         self._username = username
         self._password = password
         self._session = session
         self._token = None
         self._logger = logging.getLogger(__name__)
+        # Request counting (fork change): every HTTP request to Pawfit is
+        # counted here, including logins and commands.
+        self._now = now_fn or datetime.now
+        self.counting_since = self._now()
+        self._count_day = self.counting_since.date()
+        self.request_count = 0  # since start-up
+        self.requests_today = 0  # since local midnight (or start-up)
+        self.last_request = None
+
+    def _count_request(self) -> None:
+        """Record one HTTP request to the Pawfit API."""
+        now = self._now()
+        if now.date() != self._count_day:
+            self._count_day = now.date()
+            self.requests_today = 0
+            self.counting_since = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        self.request_count += 1
+        self.requests_today += 1
+        self.last_request = now
 
     async def async_login(self) -> dict:
         """Authenticate with Pawfit and return userId and sessionId. Raise on failure."""
@@ -76,7 +98,8 @@ class PawfitApiClient:
         
         self._logger.debug(f"Pawfit login attempt: url={url}, user={self._username}")
         
-        async with self._session.post(url, data=form_data, headers=headers) as resp:
+        self._count_request()
+        async with self._session.post(url, data=form_data, headers=headers, timeout=REQUEST_TIMEOUT) as resp:
             resp_text = await resp.text()
             self._logger.debug(f"Pawfit login response: status={resp.status}, body={resp_text[:200]}")
             
@@ -168,11 +191,14 @@ class PawfitApiClient:
             pet=sign_params.get("pet", "")
         )
         
+        kwargs.setdefault("timeout", REQUEST_TIMEOUT)
         self._logger.debug(f"Making request: method={method}, url={url}, params={kwargs.get('params')}")
+        self._count_request()
         resp = await self._session.request(method, url, headers=headers, **kwargs)
         
         if resp.status == 403:
             self._logger.warning("Pawfit API 403 received, attempting re-authentication.")
+            resp.release()
             login_data = await self.async_login()
             
             # Use the original URL and rebuild with new auth
@@ -191,8 +217,9 @@ class PawfitApiClient:
                 pet=sign_params.get("pet", "")
             )
             
+            self._count_request()
             resp = await self._session.request(method, url, headers=headers, **kwargs)
-        
+
         return resp
 
     async def async_get_trackers(self) -> list:

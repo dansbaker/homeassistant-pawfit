@@ -1,7 +1,8 @@
 """Sensor platform for Pawfit integration."""
 
 import logging
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+from homeassistant.const import EntityCategory
 from homeassistant.core import callback
 from datetime import datetime, timezone
 
@@ -237,12 +238,55 @@ class PawfitTimerSensor(SensorEntity):
         self.async_write_ha_state()
 
 
+class PawfitRequestCountSensor(SensorEntity):
+    """Requests this integration has made to Pawfit today (fork change).
+
+    Counts every HTTP request: location and activity fetches, logins and
+    Find/Light/Alarm commands.
+    """
+
+    _attr_should_poll = False
+    _attr_icon = "mdi:counter"
+    _attr_native_unit_of_measurement = "requests"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry_id):
+        self._coordinator = coordinator
+        self._attr_name = "PawFit API Requests Today"
+        self._attr_unique_id = f"{entry_id}_api_requests_today"
+
+    @property
+    def native_value(self):
+        return self._coordinator.client.requests_today
+
+    @property
+    def extra_state_attributes(self):
+        client = self._coordinator.client
+        return {
+            "counting_since": client.counting_since.isoformat(),
+            "location_fetches_today": self._coordinator.fetches_today,
+            "last_request": client.last_request.isoformat() if client.last_request else None,
+            "requests_since_start": client.request_count,
+        }
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Pawfit sensor entities from a config entry."""
     # Get the coordinator from hass.data (created in __init__.py)
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    
-    entities = []
+
+    entities = [PawfitRequestCountSensor(coordinator, entry.entry_id)]
     for tracker in coordinator.trackers:
         entities.append(PawfitSensor(tracker, coordinator, "battery", "Battery Level", unit="%", device_class=SensorDeviceClass.BATTERY))
         entities.append(PawfitSensor(tracker, coordinator, "accuracy", "Location Accuracy", unit="m", icon="mdi:map-marker-radius"))
