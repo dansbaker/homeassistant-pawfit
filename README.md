@@ -12,15 +12,19 @@ Thanks to **[@fullstackfool](https://github.com/fullstackfool/homeassistant-pawf
 
 Home Assistant **2026.9 or newer** is required. Automated tests currently cover 2026.9.4 and 2026.10.4; see [development](#development) for the exact environments.
 
+Pawfit is included in the [HACS and Marketplace catalog](https://github.com/hacs/default/pull/13714), so you can search for it directly without adding a custom repository. Catalog updates may take some time to reach your installation.
+
 ### Marketplace (Home Assistant 2026.11+)
 
-Open **Settings → Marketplace**, connect GitHub if prompted, and add `https://github.com/dansbaker/homeassistant-pawfit` as a custom **Integration** repository. Download Pawfit and restart Home Assistant if requested. Then add **Pawfit Pet Tracker** under **Settings → Devices & services → Add integration**. Existing users keep their configured account and entities when updating.
-
-The searchable default-catalog listing is subject to review; until accepted, use the custom repository URL above.
+Open **Settings → Marketplace**, search for **Pawfit**, and download the integration. Restart Home Assistant if requested, then add **Pawfit Pet Tracker** under **Settings → Devices & services → Add integration**. Existing users keep their configured account and entities when updating.
 
 ### HACS (Home Assistant 2026.9–2026.10)
 
-In HACS, add the same URL as a custom **Integration** repository, download Pawfit and restart Home Assistant. Then add **Pawfit Pet Tracker** under **Settings → Devices & services → Add integration**.
+Open HACS, search for **Pawfit**, download the integration and restart Home Assistant. Then add **Pawfit Pet Tracker** under **Settings → Devices & services → Add integration**.
+
+### Fallback: custom repository
+
+If Pawfit does not appear in search yet, refresh the catalog and try again. You can also add `https://github.com/dansbaker/homeassistant-pawfit` as a custom repository with category **Integration** in HACS or Marketplace, then download it. Marketplace may prompt you to connect GitHub when adding a custom repository.
 
 ### Manual installation
 
